@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Máy Trạm Hội Viên</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.js"></script>
+    <style>
+        body { background-color: #030712; color: #f3f4f6; font-family: system-ui, sans-serif; }
+        .cyber-panel { background: rgba(17, 24, 39, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(6, 182, 212, 0.15); }
+        .momo-color { background-color: #a50064; }
+    </style>
+</head>
+<body class="p-6 max-w-7xl mx-auto space-y-6">
+    <script>
+        function showToast(text, type = "success") { Toastify({ text: text, duration: 3000, gravity: "top", position: "right", style: { background: type === "error" ? "#ef4444" : "#06b6d4", color: "#fff", fontWeight: "bold", borderRadius: "10px" } }).showToast(); }
+    </script>
+
+    <!-- HEADER -->
+    <div class="cyber-panel p-4 rounded-xl flex justify-between items-center">
+        <div>
+            <span class="text-xs text-gray-400">HỘI VIÊN ĐANG CHƠI:</span>
+            <h2 id="client-name" class="text-lg font-bold text-cyan-400">...</h2>
+        </div>
+        <div class="flex gap-4 items-center">
+            <div class="bg-black/60 px-4 py-2 rounded-xl text-center border border-slate-800">
+                <p class="text-[10px] text-gray-400 mb-0.5 font-bold">THỜI GIAN CÒN LẠI</p>
+                <p id="client-balance" class="text-2xl font-mono font-bold text-cyan-400 tracking-wider">00:00:00</p>
+            </div>
+            <button onclick="logout()" class="bg-gray-800 hover:bg-red-600 text-xs px-3 py-2 rounded-lg transition h-fit">Đăng xuất</button>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div class="lg:col-span-2 space-y-4">
+            <h3 class="text-sm font-bold text-cyan-400 uppercase"><i class="fas fa-utensils mr-2"></i>Menu dịch vụ ăn uống tiệm net</h3>
+            <div id="client-menu-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-4"></div>
+        </div>
+
+        <div class="space-y-4">
+            <h3 class="text-sm font-bold text-orange-400 uppercase"><i class="fas fa-shopping-cart mr-2"></i>Giỏ hàng của bạn</h3>
+            <div class="cyber-panel p-4 rounded-xl flex flex-col justify-between min-h-[300px]">
+                <div id="cart-items" class="space-y-3 max-h-[250px] overflow-y-auto pr-1 text-xs"></div>
+                <div class="border-t border-gray-800 pt-3 mt-3 space-y-3">
+                    <div class="flex justify-between items-center font-bold">
+                        <span>TỔNG TIỀN:</span><span id="cart-total" class="text-sm text-green-400 font-mono">0đ</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="checkout('balance')" class="bg-cyan-600 hover:bg-cyan-500 text-[11px] font-bold py-2 rounded-lg transition">TRỪ TIỀN MÁY</button>
+                        <button onclick="checkout('momo')" class="momo-color hover:opacity-90 text-[11px] font-bold py-2 rounded-lg transition flex items-center justify-center gap-1">VÍ MOMO (PAYOS)</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="space-y-4">
+            <h3 class="text-sm font-bold text-cyan-400 uppercase"><i class="fas fa-wallet mr-2"></i>Nạp tiền (Quét QR PayOS)</h3>
+            <div class="cyber-panel p-4 rounded-xl space-y-3">
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="openDepositMomo(10000)" class="bg-slate-800 hover:bg-cyan-900 border border-slate-700 p-2 text-[11px] font-bold rounded-lg transition text-left flex justify-between items-center"><span>10k</span> <span class="text-[9px] text-cyan-400 font-mono">(20p)</span></button>
+                    <button onclick="openDepositMomo(20000)" class="bg-slate-800 hover:bg-cyan-900 border border-slate-700 p-2 text-[11px] font-bold rounded-lg transition text-left flex justify-between items-center"><span>20k</span> <span class="text-[9px] text-cyan-400 font-mono">(40p)</span></button>
+                    <button onclick="openDepositMomo(50000)" class="bg-slate-800 hover:bg-cyan-900 border border-slate-700 p-2 text-[11px] font-bold rounded-lg transition text-left flex justify-between items-center"><span>50k</span> <span class="text-[9px] text-cyan-400 font-mono">(1h40)</span></button>
+                    <button onclick="openDepositMomo(100000)" class="bg-slate-800 hover:bg-cyan-900 border border-slate-700 p-2 text-[11px] font-bold rounded-lg transition text-left flex justify-between items-center"><span>100k</span> <span class="text-[9px] text-cyan-400 font-mono">(3h20)</span></button>
+                </div>
+            </div>
+            <h3 class="text-sm font-bold text-cyan-400 uppercase"><i class="fas fa-history mr-2"></i>Đơn hàng đã đặt</h3>
+            <div id="client-order-status" class="cyber-panel p-4 rounded-xl text-xs text-gray-400 space-y-2 max-h-[150px] overflow-y-auto"></div>
+        </div>
+    </div>
+
+    <!-- MODAL THANH TOÁN MOMO -->
+    <div id="momo-modal" class="hidden fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4">
+        <div class="cyber-panel p-6 rounded-2xl max-w-sm w-full text-center border border-cyan-500 space-y-4 shadow-[0_0_20px_rgba(6,182,212,0.8)]">
+            <h3 class="text-cyan-400 font-bold text-lg">ĐANG THANH TOÁN PAYOS</h3>
+            <p class="text-xs text-gray-400">Vui lòng hoàn tất thanh toán tại tab PayOS vừa mở.</p>
+            <div class="text-sm font-bold font-mono py-2">Số tiền: <span id="momo-amount" class="text-green-400 text-2xl">0đ</span></div>
+            <button onclick="cancelFoodPayment()" class="w-full mt-4 bg-gray-800 hover:bg-red-600 text-white text-xs py-3 rounded-lg font-bold transition">HỦY ĐƠN HÀNG</button>
+        </div>
+    </div>
+
+    <!-- KHUNG CHAT -->
+    <button onclick="toggleChat()" class="relative fixed bottom-6 right-6 bg-cyan-600 hover:bg-cyan-500 p-4 rounded-full shadow-2xl z-[9999] hover:scale-105 transition cursor-pointer">
+        <i class="fas fa-headset text-white text-xl"></i>
+        <span id="chat-badge" class="hidden absolute top-0 right-0 w-3.5 h-3.5 bg-red-500 rounded-full border-2 border-gray-900 animate-ping"></span>
+        <span id="chat-badge-dot" class="hidden absolute top-0 right-0 w-3.5 h-3.5 bg-red-500 rounded-full border-2 border-gray-900"></span>
+    </button>
+    
+    <div id="chat-box" class="hidden fixed bottom-24 right-6 w-72 h-80 cyber-panel rounded-xl flex flex-col z-[9999] border border-cyan-500/50 shadow-2xl">
+        <div class="p-3 border-b border-gray-700 font-bold text-cyan-400 text-xs flex justify-between items-center">
+            <span>HỖ TRỢ NHÂN VIÊN</span>
+            <button onclick="toggleChat()" class="hover:text-red-400 font-bold px-1.5">X</button>
+        </div>
+        <div id="chat-messages" class="flex-1 overflow-y-auto p-3 space-y-2 text-xs bg-gray-950"></div>
+        <div class="p-2 flex gap-2 border-t border-gray-700 bg-gray-950/50">
+            <input id="chat-input" class="flex-1 bg-gray-950 p-1.5 rounded text-white text-xs border border-gray-700 focus:outline-none focus:border-cyan-500" placeholder="Nhập tin nhắn...">
+            <button onclick="sendMessage()" class="bg-cyan-600 hover:bg-cyan-500 px-3 rounded text-white text-xs font-bold transition">Gửi</button>
+        </div>
+    </div>
+
+    <script>
+        const SERVER_URL = 'http://127.0.0.1:3000';
+        const user = localStorage.getItem('session_user');
+        if (!user) window.location.href = 'index.html';
+        document.getElementById('client-name').innerText = user.toUpperCase();
+        let clientCart = [];
+
+        window.logout = function() { localStorage.removeItem('session_user'); window.location.href = 'index.html'; }
+
+        async function loadMenuFromAdmin() {
+            try {
+                const res = await fetch(`${SERVER_URL}/api/products`);
+                const products = await res.json();
+                const menuGrid = document.getElementById('client-menu-grid');
+                if(products.length === 0) return menuGrid.innerHTML = '<p class="text-gray-500 text-sm italic col-span-2">Quán đang hết món!</p>';
+                menuGrid.innerHTML = products.map(p => `
+                    <div class="cyber-panel p-4 rounded-xl flex justify-between items-center">
+                        <div>
+                            <h4 class="font-bold text-sm text-white">${p.name}</h4>
+                            <p class="text-xs text-green-400 font-mono mt-1">${p.price.toLocaleString()}đ</p>
+                        </div>
+                        <button onclick="addToCart(${p.id}, '${p.name}', ${p.price})" class="bg-cyan-600 hover:bg-cyan-500 text-xs font-bold px-3 py-2 rounded-lg transition">+ GIỎ</button>
+                    </div>
+                `).join('');
+            } catch(e) {}
+        }
+
+        window.addToCart = function(id, name, price) {
+            let existing = clientCart.find(item => item.id === id);
+            if(existing) existing.quantity += 1; else clientCart.push({ id, name, price, quantity: 1 });
+            renderCart();
+        }
+
+        function renderCart() {
+            const cartList = document.getElementById('cart-items');
+            if(clientCart.length === 0) { cartList.innerHTML = '<p class="text-gray-500 text-center py-4">Giỏ đang trống</p>'; document.getElementById('cart-total').innerText = '0đ'; return; }
+            let total = 0;
+            cartList.innerHTML = clientCart.map((item, index) => {
+                total += item.price * item.quantity;
+                return `<div class="flex justify-between items-center bg-gray-900 p-2 rounded-lg border border-gray-800">
+                    <span class="text-white font-bold">${item.name} <span class="text-cyan-400 ml-1">x${item.quantity}</span></span>
+                    <div class="flex items-center gap-2">
+                        <span class="text-green-400 font-bold">${(item.price * item.quantity).toLocaleString()}đ</span>
+                        <button onclick="removeFromCart(${index})" class="text-red-500 hover:text-red-400 font-bold px-2">X</button>
+                    </div>
+                </div>`;
+            }).join('');
+            document.getElementById('cart-total').innerText = total.toLocaleString() + 'đ';
+        }
+
+        window.removeFromCart = function(index) { clientCart.splice(index, 1); renderCart(); }
+
+        let foodPaymentCheckInterval = null;
+        window.checkout = function(type) {
+            if(clientCart.length === 0) return showToast("Giỏ hàng đang trống!", "error");
+            let totalAmount = clientCart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+            let itemsSummary = clientCart.map(item => `${item.quantity}x ${item.name}`).join(', ');
+            
+            if (type === 'momo') {
+                document.getElementById('momo-amount').innerText = totalAmount.toLocaleString() + 'đ';
+                document.getElementById('momo-modal').classList.remove('hidden');
+                fetch(`${SERVER_URL}/create-payment-link`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: totalAmount, username: user, type: 'food' }) })
+                .then(res => res.json()).then(data => {
+                    if (data.url) {
+                        window.open(data.url, '_blank'); 
+                        foodPaymentCheckInterval = setInterval(() => {
+                            fetch(`${SERVER_URL}/api/check-food-payment/${user}`).then(r => r.json()).then(status => {
+                                if (status.paid) { clearInterval(foodPaymentCheckInterval); document.getElementById('momo-modal').classList.add('hidden'); submitOrder('PayOS', totalAmount, itemsSummary); }
+                            });
+                        }, 2000); 
+                    }
+                });
+            } else { submitOrder('Trừ tiền máy', totalAmount, itemsSummary); }
+        }
+
+        window.cancelFoodPayment = function() { if(foodPaymentCheckInterval) clearInterval(foodPaymentCheckInterval); document.getElementById('momo-modal').classList.add('hidden'); }
+
+        async function submitOrder(paymentMethod, totalAmount, itemsSummary) {
+            await fetch(`${SERVER_URL}/api/orders`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: Date.now(), machineName: user.toLowerCase().trim(), itemsSummary, totalAmount, paymentMethod, status: 'pending', time: new Date().toLocaleTimeString('vi-VN') }) });
+            clientCart = []; renderCart(); showToast("Đã gửi order lên Server!", "success"); loadMyOrders(); 
+        }
+
+        async function loadMyOrders() {
+            try {
+                const res = await fetch(`${SERVER_URL}/api/orders`);
+                const orders = await res.json();
+                let myOrders = orders.filter(o => o.machineName === user.toLowerCase().trim());
+                document.getElementById('client-order-status').innerHTML = myOrders.length === 0 ? 'Chưa đặt món nào.' : myOrders.reverse().map(o => `
+                    <div class="flex justify-between border-b border-gray-800 pb-2 mb-2">
+                        <div>
+                            <p class="text-white text-[11px] font-bold mb-1">${o.itemsSummary}</p>
+                            <p class="text-[10px] text-gray-500">Tổng: ${o.totalAmount.toLocaleString()}đ</p>
+                        </div>
+                        <span class="${o.status === 'pending' ? 'text-orange-400' : 'text-green-400'} font-bold text-[10px] mt-1">${o.status === 'pending' ? 'ĐANG CHUẨN BỊ' : 'ĐÃ GIAO'}</span>
+                    </div>
+                `).join('');
+            } catch(e) {}
+        }
+
+        function toggleChat() { 
+            document.getElementById('chat-box').classList.toggle('hidden'); 
+            fetch(`${SERVER_URL}/api/chat/read`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ machine: user.toLowerCase().trim(), reader: 'client' }) });
+            document.getElementById('chat-badge').classList.add('hidden'); document.getElementById('chat-badge-dot').classList.add('hidden');
+        }
+
+        window.sendMessage = async function() {
+            const input = document.getElementById('chat-input');
+            if(!input.value.trim()) return;
+            await fetch(`${SERVER_URL}/api/chat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ machine: user.toLowerCase().trim(), from: user.toLowerCase().trim(), msg: input.value, time: new Date().toLocaleTimeString(), read: false }) });
+            input.value = ''; renderChat();
+        }
+
+        async function renderChat() {
+            try {
+                const res = await fetch(`${SERVER_URL}/api/chat`);
+                const chats = await res.json();
+                const box = document.getElementById('chat-messages');
+                let myChats = chats.filter(c => c.machine === user.toLowerCase().trim());
+                if(!box) return;
+
+                box.innerHTML = myChats.map(c => `
+                    <div class="${c.from === user.toLowerCase().trim() ? 'text-right' : 'text-left'}">
+                        <p class="inline-block ${c.from === user.toLowerCase().trim() ? 'bg-cyan-900 text-cyan-200' : 'bg-gray-800 text-gray-200'} p-2 rounded text-xs">
+                            ${c.from === 'admin' ? '<strong class="text-yellow-400">Admin: </strong>' : ''}${c.msg}
+                        </p>
+                        <p class="text-[9px] text-gray-500">${c.time}</p>
+                    </div>
+                `).join('');
+                box.scrollTop = box.scrollHeight;
+
+                const unread = chats.some(c => c.machine === user.toLowerCase().trim() && c.from === 'admin' && !c.read);
+                if (unread && document.getElementById('chat-box').classList.contains('hidden')) {
+                    document.getElementById('chat-badge').classList.remove('hidden'); document.getElementById('chat-badge-dot').classList.remove('hidden');
+                }
+            } catch(e) {}
+        }
+
+        function syncTimeWithServer() {
+            fetch(`${SERVER_URL}/api/sync-devices`).then(res => res.json()).then(serverUsers => {
+                const myData = serverUsers.find(u => u.username === user.toLowerCase().trim());
+                if (myData) {
+                    document.getElementById('client-balance').innerText = myData.time_remaining;
+                    if (myData.time_remaining === "00:00:00" && myData.status === "locked") { showToast("Hết thời gian!", "error"); logout(); }
+                }
+            }).catch(e => {});
+        }
+
+        window.openDepositMomo = function(amount) {
+            fetch(`${SERVER_URL}/create-payment-link`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount, username: user.toLowerCase().trim(), type: 'topup' }) })
+            .then(res => res.json()).then(data => { if (data.url) window.location.href = data.url; }).catch(e => showToast("Lỗi QR!", "error"));
+        }
+        
+        // ================= HỆ THỐNG CAMERA GIÁM SÁT TỰ ĐỘNG =================
+        function captureAndUploadScreen() {
+            if (typeof html2canvas === 'undefined' || !user) {
+                setTimeout(captureAndUploadScreen, 2000);
+                return;
+            }
+            
+            let indicator = document.getElementById('debug-dot');
+            if(!indicator) {
+                indicator = document.createElement('div');
+                indicator.id = 'debug-dot';
+                indicator.style.cssText = 'position:fixed; top:10px; left:10px; width:16px; height:16px; background:yellow; border-radius:50%; z-index:999999; border:2px solid white;';
+                document.body.appendChild(indicator);
+            }
+            indicator.style.background = 'orange'; 
+
+            html2canvas(document.body, { 
+                logging: false, 
+                useCORS: true, 
+                allowTaint: true,
+                scale: 0.8, 
+                backgroundColor: "#030712"
+            }).then(canvas => {
+                const base64Image = canvas.toDataURL('image/jpeg', 0.8); 
+                
+                fetch(`${SERVER_URL}/api/client-upload-screen`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        username: user.toLowerCase().trim(), 
+                        image: base64Image 
+                    })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    indicator.style.background = 'green'; // Thành công
+                    setTimeout(captureAndUploadScreen, 2000); 
+                })
+                .catch(err => {
+                    indicator.style.background = 'red'; // Lỗi mạng
+                    setTimeout(captureAndUploadScreen, 3000);
+                });
+            }).catch(err => {
+                indicator.style.background = 'purple'; // Lỗi thư viện
+                setTimeout(captureAndUploadScreen, 4000);
+            });
+        }
+
+        // KÍCH HOẠT HỆ THỐNG SAU KHI LOAD XONG TRANG
+        window.addEventListener('load', () => {
+            setTimeout(captureAndUploadScreen, 1000);
+        });
+        
+        loadMenuFromAdmin(); renderCart(); loadMyOrders(); renderChat(); syncTimeWithServer();
+        setInterval(syncTimeWithServer, 1000); 
+        setInterval(loadOrders, 2000); 
+        setInterval(renderChat, 2000);
+        setInterval(loadMenuFromAdmin, 3000);
+    </script>
+</body>
+</html>

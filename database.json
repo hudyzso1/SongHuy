@@ -1,0 +1,18 @@
+[
+  {
+    "username": "admin",
+    "password": "admin",
+    "role": "admin",
+    "status": "playing",
+    "time_remaining": "99:99:99",
+    "money": 999999
+  },
+  {
+    "username": "may01",
+    "password": "123",
+    "role": "client",
+    "status": "playing",
+    "time_remaining": "12:08:34",
+    "money": 122000
+  }
+]

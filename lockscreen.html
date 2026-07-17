@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>CyberNet - Máy Trạm Đang Khóa</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: white;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            /* 🔴 CHIÊU QUAN TRỌNG: Vô hiệu hóa bôi đen và chuột phải */
+            user-select: none; 
+        }
+        .lock-card {
+            background: rgba(0, 0, 0, 0.75);
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 0 25px #00f2fe;
+            text-align: center;
+            border: 1px solid #00f2fe;
+        }
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+            color: #00f2fe;
+            text-shadow: 0 0 10px #00f2fe;
+        }
+        input {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border: 1px solid #555;
+            background: #222;
+            color: white;
+            font-size: 1.1rem;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background: #00f2fe;
+            border: none;
+            color: #000;
+            font-weight: bold;
+            font-size: 1.1rem;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+        button:hover {
+            background: #00c6ff;
+            box-shadow: 0 0 15px #00c6ff;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="lock-card">
+        <h1>CYBERNET TIỆM NÉT</h1>
+        <p>Vui lòng đăng nhập để sử dụng máy</p>
+        <br>
+        <input type="text" id="username" placeholder="Tên tài khoản hội viên...">
+        <input type="password" id="password" placeholder="Mật khẩu...">
+        <button onclick="handleLogin()">ĐĂNG NHẬP MÁY TRANG</button>
+    </div>
+
+    <script>
+        // Chặn phím F12 và chuột phải để khách không soi code tắt màn hình
+        document.addEventListener('contextmenu', event => event.preventDefault());
+        document.onkeydown = function (e) {
+            if (e.keyCode == 123) return false; // Chặn F12
+        };
+
+        function handleLogin() {
+            // Logic check tài khoản của Huy ở đây, nếu đúng thì chuyển hướng
+            alert("Đăng nhập thành công! Mở khóa máy...");
+            window.location.href = 'client.html'; 
+        }
+    </script>
+</body>
+</html>

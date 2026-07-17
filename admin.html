@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Hệ Thống Quản Lý CyberNet - Admin</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.js"></script>
+    <style>
+        body { background-color: #030712; color: #f3f4f6; font-family: system-ui, sans-serif; margin: 0; padding: 0; }
+        .cyber-card { background: rgba(17, 24, 39, 0.8); backdrop-filter: blur(8px); border: 1px solid rgba(6, 182, 212, 0.15); }
+        .cyber-panel { background: rgba(17, 24, 39, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(6, 182, 212, 0.15); }
+        .machine-btn { transition: all 0.2s ease; cursor: pointer; }
+        .machine-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(6, 182, 212, 0.2); }
+    </style>
+</head>
+<body class="p-6">
+    <script>
+        function showToast(text, type = "success") {
+            Toastify({ text: text, duration: 3000, close: true, gravity: "top", position: "right", style: { background: type === "error" ? "#ef4444" : "#06b6d4", color: "#fff", fontWeight: "bold", borderRadius: "10px" } }).showToast();
+        }
+    </script>
+    <div class="max-w-7xl mx-auto space-y-6">
+        <!-- HEADER ADMIN -->
+        <div class="flex justify-between items-center bg-gray-900 p-4 rounded-2xl border border-cyan-900/40 shadow-xl">
+            <div>
+                <h1 class="text-cyan-400 text-2xl font-black tracking-wider">CYBERZONE CENTRAL CONTROL</h1>
+                <p class="text-xs text-gray-400">Trạng thái hệ thống: <span class="text-green-400 font-bold animate-pulse">● ONLINE (API CLOUD)</span></p>
+            </div>
+            <div class="text-right">
+                <span class="text-xs text-gray-400 block">Doanh Thu Ca Trực</span>
+                <span id="revenue-display" class="text-xl font-black text-emerald-400">0đ</span>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="lg:col-span-2 space-y-6">
+                <!-- NẠP TIỀN -->
+                <div class="cyber-card p-5 rounded-2xl shadow-lg">
+                    <h2 class="text-cyan-400 text-sm font-bold tracking-wide mb-3 flex items-center gap-2">⚡ NẠP TIỀN TẠI QUẦY</h2>
+                    <div class="flex gap-3">
+                        <input id="topup-username" type="text" placeholder="Tên máy (Ví dụ: may03)..." class="flex-1 bg-gray-950 border border-gray-800 p-2.5 rounded-xl text-sm text-white focus:outline-none focus:border-cyan-500">
+                        <input id="topup-amount" type="number" placeholder="Số tiền nạp (đ)..." class="w-40 bg-gray-950 border border-gray-800 p-2.5 rounded-xl text-sm text-white focus:outline-none focus:border-cyan-500">
+                        <button onclick="adminTopUp()" id="btn-topup" class="bg-cyan-600 hover:bg-cyan-500 font-bold px-6 text-sm rounded-xl transition shadow-lg shadow-cyan-900/30">XÁC NHẬN NẠP</button>
+                    </div>
+                </div>
+
+                <!-- LIVESTREAM -->
+                <div class="cyber-card p-5 rounded-2xl shadow-lg">
+                    <div class="flex justify-between items-center mb-3">
+                        <h2 class="text-cyan-400 text-sm font-bold tracking-wide">🖥️ ĐANG GIÁM SÁT MÁY: <span id="current-monitoring-title" class="text-yellow-400 font-black ml-1">CHƯA CHỌN</span></h2>
+                    </div>
+                    <!-- KHUNG MÀN HÌNH TỰ ĐỘNG CHỐNG VỠ ẢNH -->
+                    <div id="screen-container" class="bg-gray-950 rounded-xl overflow-hidden border border-gray-800 flex items-center justify-center min-h-[340px] relative text-gray-500 font-mono text-sm text-center">
+                        <img id="screen-may01" src="" class="hidden w-full h-auto object-contain max-h-[480px]">
+                        <span id="screen-text" class="animate-pulse">VUI LÒNG CHỌN MỘT MÁY ĐỂ KẾT NỐI CAMERA...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SƠ ĐỒ MÁY TRẠM -->
+            <div class="cyber-card p-5 rounded-2xl shadow-lg h-fit">
+                <h2 class="text-cyan-400 text-sm font-bold tracking-wide mb-4">🧩 SƠ ĐỒ MÁY TRẠM</h2>
+                <div id="device-container" class="grid grid-cols-2 gap-3 max-h-[500px] overflow-y-auto pr-1"></div>
+            </div>
+        </div>
+
+        <!-- QUẢN LÝ ĐƠN HÀNG -->
+        <div class="cyber-card p-5 rounded-2xl shadow-lg mt-6 border-l-4 border-l-orange-500">
+            <h3 class="text-cyan-400 font-bold uppercase mb-4 flex items-center gap-2">🛒 ĐƠN HÀNG CHỜ XÁC NHẬN</h3>
+            <div id="adminOrderList" class="flex flex-col gap-3"></div>
+        </div>
+
+        <!-- QUẢN LÝ SẢN PHẨM -->
+        <div class="cyber-card p-5 rounded-2xl shadow-lg mt-6">
+            <h3 class="text-cyan-400 font-bold uppercase mb-4 flex items-center gap-2">🍔 QUẢN LÝ THỰC ĐƠN</h3>
+            <div class="flex gap-3 mb-6 flex-wrap">
+                <input type="text" id="newProductName" placeholder="Nhập tên món..." class="bg-gray-950 border border-gray-800 p-2.5 rounded-xl text-sm text-white focus:outline-none focus:border-cyan-500" style="flex: 2;">
+                <input type="number" id="newProductPrice" placeholder="Giá tiền..." class="flex-1 bg-gray-950 border border-gray-800 p-2.5 rounded-xl text-sm text-white focus:outline-none focus:border-cyan-500">
+                <input type="number" id="newProductStock" placeholder="Tồn kho..." class="flex-1 bg-gray-950 border border-gray-800 p-2.5 rounded-xl text-sm text-white focus:outline-none focus:border-cyan-500">
+                <button onclick="addNewProduct()" class="bg-cyan-600 hover:bg-cyan-500 font-bold px-6 py-2.5 text-sm rounded-xl transition">+ THÊM MÓN</button>
+            </div>
+            <div id="adminProductList" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4"></div>
+        </div>
+    </div>
+
+    <!-- NÚT MỞ CHAT & KHUNG CHAT ADMIN -->
+    <button onclick="toggleAdminChat()" class="relative fixed bottom-6 right-6 bg-cyan-600 hover:bg-cyan-500 p-4 rounded-full shadow-2xl z-[9999] hover:scale-105 transition cursor-pointer">
+        <i class="fas fa-headset text-white text-xl"></i>
+        <span id="admin-chat-badge" class="hidden absolute top-0 right-0 w-3.5 h-3.5 bg-red-500 rounded-full border-2 border-gray-900 animate-pulse"></span>
+    </button>
+    <div id="admin-chat-box" class="hidden fixed bottom-24 right-6 w-80 h-96 cyber-panel rounded-xl flex flex-col z-[9999] border border-cyan-500/50 shadow-2xl">
+        <div class="p-3 border-b border-gray-700 font-bold text-cyan-400 text-xs flex justify-between items-center">
+            <span>QUẢN TRỊ VIÊN - TRÒ CHUYỆN</span>
+            <button onclick="toggleAdminChat()" class="hover:text-red-400 font-bold px-1.5">X</button>
+        </div>
+        <div id="admin-chat-messages" class="flex-1 overflow-y-auto p-3 space-y-2 text-xs bg-gray-950"></div>
+        <div class="p-2 flex gap-2 border-t border-gray-700 bg-gray-900">
+            <input id="admin-chat-input" class="flex-1 bg-gray-950 p-1.5 rounded text-white text-xs border border-gray-700 focus:outline-none focus:border-cyan-500" placeholder="Phản hồi khách...">
+            <button onclick="adminReply()" class="bg-cyan-600 hover:bg-cyan-500 px-3 rounded text-white text-xs font-bold transition">Gửi</button>
+        </div>
+    </div>
+
+    <script>
+        const SERVER_URL = 'http://127.0.0.1:3000';
+        let selectedMachine = ""; 
+
+        async function fetchRevenue() {
+            try {
+                const res = await fetch(`${SERVER_URL}/api/revenue`);
+                const data = await res.json();
+                document.getElementById('revenue-display').innerText = data.revenue.toLocaleString() + 'đ';
+            } catch(e) {}
+        }
+
+        async function syncWithServer() {
+            try {
+                const res = await fetch(`${SERVER_URL}/api/sync-devices`);
+                const devices = await res.json();
+                const container = document.getElementById('device-container');
+                container.innerHTML = devices.length === 0 ? `<p class="col-span-2 text-xs text-gray-500 text-center py-4">Chưa có máy trạm nào!</p>` : devices.map(device => `
+                    <div onclick="selectMachine('${device.username}')" class="machine-btn border p-3 rounded-xl flex flex-col justify-between ${device.status === 'playing' ? "border-green-950 bg-green-950/40 text-green-400" : "border-red-900/50 bg-red-950/30 text-red-400"} ${selectedMachine === device.username.toLowerCase() ? "border-cyan-400 ring-2 ring-cyan-500/30 font-black" : ""}">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-xs font-bold">${device.username.toUpperCase()}</span>
+                            <span class="text-[9px] uppercase px-1.5 py-0.5 rounded-md bg-black/40 font-mono">${device.status}</span>
+                        </div>
+                        <div class="space-y-0.5 mt-1 text-left">
+                            <p class="text-[10px] opacity-80">⏰ Con: <span class="font-mono font-bold">${device.time_remaining}</span></p>
+                            <p class="text-[10px] opacity-80">💰 Quỹ: <span>${device.money.toLocaleString()}đ</span></p>
+                        </div>
+                    </div>
+                `).join('');
+            } catch(e) {}
+        }
+
+        window.selectMachine = function(machineName) {
+            selectedMachine = machineName.toLowerCase().trim();
+            document.getElementById('current-monitoring-title').innerText = machineName.toUpperCase();
+            document.getElementById('screen-text').innerText = "ĐANG TẢI DỮ LIỆU CAMERA...";
+            syncWithServer(); 
+        }
+
+        function updateLiveScreenshot() {
+            if (!selectedMachine) return;
+            fetch(`${SERVER_URL}/api/monitor/may01?machine=${selectedMachine}`).then(res => res.json()).then(data => {
+                const img = document.getElementById('screen-may01');
+                const txt = document.getElementById('screen-text');
+                if (data.image && data.image !== "") {
+                    img.src = data.image;
+                    img.classList.remove('hidden');
+                    txt.classList.add('hidden');
+                } else {
+                    img.classList.add('hidden');
+                    txt.classList.remove('hidden');
+                    txt.innerText = "CHƯA NHẬN ĐƯỢC TÍN HIỆU TỪ MÁY KHÁCH NÀY!";
+                }
+            }).catch(e => {});
+        }
+
+        window.adminTopUp = async function() {
+            const btn = document.getElementById('btn-topup');
+            const username = document.getElementById('topup-username').value.trim();
+            const amount = parseInt(document.getElementById('topup-amount').value);
+            if (!username || isNaN(amount)) return showToast("Vui lòng điền đủ tên máy và số tiền!", "error");
+            
+            btn.disabled = true; btn.innerText = "ĐANG XỬ LÝ...";
+            try {
+                const res = await fetch(`${SERVER_URL}/api/admin-topup`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, amount }) });
+                const data = await res.json();
+                btn.disabled = false; btn.innerText = "XÁC NHẬN NẠP";
+                if (data.error) showToast(data.error, "error");
+                else {
+                    showToast(data.msg, "success");
+                    await fetch(`${SERVER_URL}/api/revenue`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount }) });
+                    fetchRevenue();
+                    document.getElementById('topup-username').value = '';
+                    document.getElementById('topup-amount').value = '';
+                    syncWithServer(); 
+                }
+            } catch(e) { btn.disabled = false; btn.innerText = "XÁC NHẬN NẠP"; showToast("Lỗi API Nạp tiền!", "error"); }
+        }
+
+        async function loadProducts() {
+            try {
+                const res = await fetch(`${SERVER_URL}/api/products`);
+                const products = await res.json();
+                document.getElementById('adminProductList').innerHTML = products.map(p => `
+                    <div class="bg-gray-900 border border-gray-800 p-4 rounded-xl flex justify-between items-center shadow-md">
+                        <div>
+                            <p class="text-white font-bold text-sm mb-1">${p.name}</p>
+                            <p class="text-cyan-400 font-bold text-sm">${p.price.toLocaleString()}đ <span class="text-gray-500 text-xs ml-1">(Tồn: ${p.stock})</span></p>
+                        </div>
+                        <button onclick="deleteProduct(${p.id})" class="bg-red-900/60 hover:bg-red-600 text-red-200 px-3 py-1.5 rounded-lg text-xs font-bold transition">XÓA</button>
+                    </div>
+                `).join('');
+            } catch(e) {}
+        }
+
+        window.addNewProduct = async function() {
+            const name = document.getElementById('newProductName').value;
+            const price = parseInt(document.getElementById('newProductPrice').value);
+            const stock = parseInt(document.getElementById('newProductStock').value);
+            if(!name || isNaN(price) || isNaN(stock)) return showToast("Vui lòng nhập đầy đủ thông tin món!", "error");
+            
+            await fetch(`${SERVER_URL}/api/products`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: Date.now(), name, price, stock }) });
+            document.getElementById('newProductName').value = ''; document.getElementById('newProductPrice').value = ''; document.getElementById('newProductStock').value = '';
+            loadProducts();
+            showToast("Thêm món thành công!", "success");
+        }
+
+        window.deleteProduct = async function(id) {
+            await fetch(`${SERVER_URL}/api/products/${id}`, { method: 'DELETE' });
+            loadProducts(); showToast("Đã xóa món!", "warning");
+        }
+
+        async function loadOrders() {
+            try {
+                const res = await fetch(`${SERVER_URL}/api/orders`);
+                const orders = await res.json();
+                const pendingOrders = orders.filter(o => o.status === 'pending');
+                const list = document.getElementById('adminOrderList');
+                
+                if(pendingOrders.length === 0) return list.innerHTML = `<p class="text-gray-500 italic text-sm py-2">Hiện tại không có đơn hàng nào chờ duyệt...</p>`;
+                list.innerHTML = pendingOrders.map(order => `
+                    <div class="bg-gray-900 border border-gray-800 border-l-4 border-l-orange-500 p-4 rounded-xl flex justify-between items-center shadow-md">
+                        <div>
+                            <p class="text-cyan-400 font-bold text-sm mb-1 uppercase">MÁY: ${order.machineName} <span class="text-gray-500 text-xs font-normal normal-case ml-2">- ${order.time}</span></p>
+                            <p class="text-white text-sm mb-1">${order.itemsSummary}</p>
+                            <p class="text-orange-400 font-bold text-sm">Tổng tiền: ${order.totalAmount.toLocaleString()}đ</p>
+                        </div>
+                        <button onclick="verifyOrder(${order.id}, '${order.machineName}')" class="bg-cyan-600 hover:bg-cyan-500 text-white px-5 py-2 rounded-lg text-sm font-bold transition">✓ XÁC NHẬN</button>
+                    </div>
+                `).join('');
+            } catch(e) {}
+        }
+
+        window.verifyOrder = async function(orderId, machineName) {
+            await fetch(`${SERVER_URL}/api/orders/${orderId}`, { method: 'PUT' });
+            fetchRevenue(); loadOrders();
+            showToast(`Đã xác nhận đơn hàng cho ${machineName.toUpperCase()}!`, "success");
+        }
+
+        function toggleAdminChat() { 
+            document.getElementById('admin-chat-box').classList.toggle('hidden'); 
+            fetch(`${SERVER_URL}/api/chat/read`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reader: 'admin' }) });
+            document.getElementById('admin-chat-badge').classList.add('hidden');
+        }
+
+        window.adminReply = async function() {
+            const input = document.getElementById('admin-chat-input');
+            if(!input.value.trim()) return;
+            let targetMachine = selectedMachine || 'may02'; 
+            await fetch(`${SERVER_URL}/api/chat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ machine: targetMachine.toLowerCase().trim(), from: 'admin', msg: input.value, time: new Date().toLocaleTimeString(), read: false }) });
+            input.value = ''; renderAdminChat();
+        }
+
+        async function renderAdminChat() {
+            try {
+                const res = await fetch(`${SERVER_URL}/api/chat`);
+                const chats = await res.json();
+                const box = document.getElementById('admin-chat-messages');
+                const badge = document.getElementById('admin-chat-badge');
+                if(!box) return;
+
+                box.innerHTML = chats.map(c => `
+                    <div class="${c.from === 'admin' ? 'text-right' : 'text-left'}">
+                        <p class="inline-block ${c.from === 'admin' ? 'bg-cyan-900 text-cyan-200' : 'bg-gray-800 text-gray-200'} p-2 rounded text-xs">
+                            <strong class="text-orange-400">[${c.machine ? c.machine.toUpperCase() : 'KHÁCH'}]: </strong> ${c.msg}
+                        </p>
+                        <p class="text-[9px] text-gray-500">${c.time}</p>
+                    </div>
+                `).join('');
+                box.scrollTop = box.scrollHeight;
+
+                const hasUnread = chats.some(c => c.from !== 'admin' && !c.read);
+                if (hasUnread && document.getElementById('admin-chat-box').classList.contains('hidden')) badge.classList.remove('hidden');
+            } catch(e) {}
+        }
+
+        fetchRevenue(); loadProducts(); loadOrders(); syncWithServer(); renderAdminChat();
+        setInterval(syncWithServer, 1000); 
+        setInterval(updateLiveScreenshot, 1000); 
+        setInterval(loadOrders, 2000); 
+        setInterval(renderAdminChat, 2000);
+    </script>
+</body>
+</html>

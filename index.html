@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Đăng Nhập CyberNet</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #030712; color: #f3f4f6; font-family: system-ui, sans-serif; }
+        .cyber-panel { background: rgba(17, 24, 39, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(6, 182, 212, 0.15); }
+    </style>
+</head>
+<body class="h-screen flex items-center justify-center p-4">
+    <div class="cyber-panel p-8 rounded-2xl w-full max-w-md shadow-2xl">
+        <h2 id="auth-title" class="text-cyan-400 text-3xl font-black text-center mb-6 tracking-wider">CYBER ZONE</h2>
+        
+        <div class="space-y-4">
+            <input id="auth-user" type="text" placeholder="Tên tài khoản..." class="w-full bg-gray-800 border border-gray-700 p-3 rounded-xl text-white focus:outline-none focus:border-cyan-500">
+            <input id="auth-pass" type="password" placeholder="Mật khẩu..." class="w-full bg-gray-800 border border-gray-700 p-3 rounded-xl text-white focus:outline-none focus:border-cyan-500">
+            
+            <button onclick="handleAuth()" id="btn-auth-main" class="w-full bg-cyan-600 hover:bg-cyan-500 font-bold py-3 rounded-xl transition">
+                ĐĂNG NHẬP
+            </button>
+            
+            <div class="text-center mt-4">
+                <button onclick="toggleAuthMode()" id="btn-auth-toggle" class="text-xs text-gray-400 hover:text-cyan-400 underline">
+                    Chưa có tài khoản? Đăng ký ngay
+                </button>
+            </div>
+        </div>
+        <div class="mt-6 p-3 bg-gray-950 rounded-xl border border-gray-800 text-[11px] text-gray-500 space-y-1">
+            <p>💡 **Nếu cần hỗ trợ liên hệ** <span class="text-cyan-400">093980327 / 0857993603</span></p>
+            <p>💡 Khách hàng tự bấm Đăng ký xong là có thể sang máy trạm dùng được luôn.</p>
+        </div>
+    </div>
+
+    <script>
+        const SERVER_URL = 'http://127.0.0.1:3000'; 
+        let isRegisterMode = false;
+
+        function toggleAuthMode() {
+            isRegisterMode = !isRegisterMode;
+            document.getElementById('auth-title').innerText = isRegisterMode ? "ĐĂNG KÝ HỘI VIÊN" : "CYBER ZONE";
+            document.getElementById('btn-auth-main').innerText = isRegisterMode ? "TẠO TÀI KHOẢN MỚI" : "ĐĂNG NHẬP";
+            document.getElementById('btn-auth-toggle').innerText = isRegisterMode ? "Đã có tài khoản? Đăng nhập" : "Chưa có tài khoản? Đăng ký ngay";
+        }
+
+        function handleAuth() {
+            const u = document.getElementById('auth-user').value.trim();
+            const p = document.getElementById('auth-pass').value.trim();
+            if (!u || !p) return alert("Vui lòng điền đủ thông tin nha fen!");
+
+            if (isRegisterMode) {
+                // ĐĂNG KÝ TRUYỀN LÊN SERVER NODEJS
+                fetch(`${SERVER_URL}/api/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: u, password: p })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error) {
+                        alert(data.error);
+                    } else {
+                        alert(data.msg);
+                        toggleAuthMode();
+                    }
+                })
+                .catch(err => alert("Lỗi kết nối Server không thể đăng ký!"));
+            } else {
+                // ĐĂNG NHẬP ĐỐI CHIẾU DƯỚI SERVER NODEJS
+                fetch(`${SERVER_URL}/api/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: u, password: p })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error) {
+                        alert(data.error);
+                    } else {
+                        localStorage.setItem('session_user', data.username);
+                        
+                        // Mồi database ảo cục bộ để tránh lỗi code cũ đọc menu/orders
+                        let localDB = JSON.parse(localStorage.getItem('cyber_db')) || { revenue: 0, menu: [], orders: [] };
+                        if (!localDB.menu || localDB.menu.length === 0) {
+                            localDB.menu = [
+                                { id: "mi_tom", name: "Mì tôm bẻ làm bốn", price: 15000, stock: 20 },
+                                { id: "sting", name: "Sting dâu lạnh", price: 12000, stock: 15 }
+                            ];
+                        }
+                        localDB.users = localDB.users || {};
+                        localDB.users[data.username] = { balance: data.money, role: data.role };
+                        localStorage.setItem('cyber_db', JSON.stringify(localDB));
+
+                        if (data.role === 'admin') {
+                            window.location.href = 'admin.html';
+                        } else {
+                            window.location.href = 'client.html';
+                        }
+                    }
+                })
+                .catch(err => alert("Lỗi kết nối Server không thể đăng nhập!"));
+            }
+        }
+    </script>
+</body>
+</html>
