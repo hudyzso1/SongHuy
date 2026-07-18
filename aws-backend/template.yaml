@@ -1,0 +1,182 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: CyberNet Cloud - serverless backend deployment
+
+Parameters:
+  PrivateAppSubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: Private application subnet for the CyberNet Lambda function
+
+  LambdaSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: Security group attached to the CyberNet Lambda function
+
+  AllowedOrigin:
+    Type: String
+    Default: "*"
+    Description: Allowed frontend origin during initial deployment
+
+Globals:
+  Function:
+    Runtime: nodejs22.x
+    Architectures:
+      - x86_64
+    Timeout: 30
+    MemorySize: 512
+    Tracing: Active
+
+Resources:
+  CyberNetHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins:
+          - !Ref AllowedOrigin
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - PATCH
+          - DELETE
+          - OPTIONS
+
+  CyberNetApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: cybernet-api
+      CodeUri: src/
+      Handler: app.handler
+
+      Environment:
+        Variables:
+          NODE_ENV: production
+          ALLOWED_ORIGIN: !Ref AllowedOrigin
+          PRODUCTS_TABLE: !Ref ProductsTable
+          PRODUCT_IMAGES_BUCKET: !Ref ProductImagesBucket
+
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroupId
+        SubnetIds:
+          - !Ref PrivateAppSubnetId
+
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ProductsTable
+
+        - S3CrudPolicy:
+            BucketName: !Ref ProductImagesBucket
+
+      Events:
+        RootRequest:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref CyberNetHttpApi
+            Path: /
+            Method: ANY
+
+        ProxyRequest:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref CyberNetHttpApi
+            Path: /{proxy+}
+            Method: ANY
+
+  ProductsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: CyberNet-Products
+      BillingMode: PAY_PER_REQUEST
+
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+
+      SSESpecification:
+        SSEEnabled: true
+
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
+      Tags:
+        - Key: Project
+          Value: CyberNet
+
+  ProductImagesBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins:
+              - "http://127.0.0.1:5500"
+              - "http://localhost:5500"
+            AllowedMethods:
+              - GET
+              - PUT
+              - HEAD
+            AllowedHeaders:
+              - "*"
+            ExposedHeaders:
+              - ETag
+            MaxAge: 3000
+
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteIncompleteUploads
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1
+
+      Tags:
+        - Key: Project
+          Value: CyberNet
+        - Key: Purpose
+          Value: ProductImages
+
+  ProductImagesBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ProductImagesBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: RequireSecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !GetAtt ProductImagesBucket.Arn
+              - !Sub "${ProductImagesBucket.Arn}/*"
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+
+Outputs:
+  ApiUrl:
+    Description: Public URL for the CyberNet HTTP API
+    Value: !Sub "https://${CyberNetHttpApi}.execute-api.${AWS::Region}.amazonaws.com"
+
+  ProductImagesBucketName:
+    Description: S3 bucket storing CyberNet product images
+    Value: !Ref ProductImagesBucket
+
+  ApiFunctionName:
+    Description: Lambda function name
+    Value: !Ref CyberNetApiFunction
+
+  ProductsTableName:
+    Description: DynamoDB products table
+    Value: !Ref ProductsTable

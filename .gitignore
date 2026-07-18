@@ -1,0 +1,38 @@
+﻿# Dependencies
+node_modules/
+aws-backend/src/node_modules/
+
+# AWS SAM
+.aws-sam/
+aws-backend/.aws-sam/
+aws-backend/samconfig.toml
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.csv
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Runtime uploads
+uploads/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor
+.vscode/
+.idea/
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# Backup files
+*.backup.js
+*_backup.html
+.gitignore-folder-backup/
