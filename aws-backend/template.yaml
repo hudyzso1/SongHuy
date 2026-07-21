@@ -56,6 +56,8 @@ Resources:
           ALLOWED_ORIGIN: !Ref AllowedOrigin
           PRODUCTS_TABLE: !Ref ProductsTable
           ORDERS_TABLE: !Ref OrdersTable
+          MACHINES_TABLE: !Ref MachinesTable
+          CHAT_MESSAGES_TABLE: !Ref ChatMessagesTable
           PRODUCT_IMAGES_BUCKET: !Ref ProductImagesBucket
 
       VpcConfig:
@@ -70,6 +72,12 @@ Resources:
 
         - DynamoDBCrudPolicy:
             TableName: !Ref OrdersTable
+
+        - DynamoDBCrudPolicy:
+            TableName: !Ref MachinesTable
+
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ChatMessagesTable
 
         - S3CrudPolicy:
             BucketName: !Ref ProductImagesBucket
@@ -140,6 +148,58 @@ Resources:
           Value: CyberNet
         - Key: Purpose
           Value: Orders
+
+  MachinesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: CyberNet-Machines
+      BillingMode: PAY_PER_REQUEST
+
+      AttributeDefinitions:
+        - AttributeName: username
+          AttributeType: S
+
+      KeySchema:
+        - AttributeName: username
+          KeyType: HASH
+
+      SSESpecification:
+        SSEEnabled: true
+
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
+      Tags:
+        - Key: Project
+          Value: CyberNet
+        - Key: Purpose
+          Value: Machines
+
+  ChatMessagesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: CyberNet-ChatMessages
+      BillingMode: PAY_PER_REQUEST
+
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+
+      SSESpecification:
+        SSEEnabled: true
+
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
+      Tags:
+        - Key: Project
+          Value: CyberNet
+        - Key: Purpose
+          Value: ChatMessages
 
   FrontendBucket:
     Type: AWS::S3::Bucket
@@ -317,6 +377,14 @@ Outputs:
   OrdersTableName:
     Description: DynamoDB orders table
     Value: !Ref OrdersTable
+
+  MachinesTableName:
+    Description: DynamoDB machines table
+    Value: !Ref MachinesTable
+
+  ChatMessagesTableName:
+    Description: DynamoDB chat messages table
+    Value: !Ref ChatMessagesTable
 
   FrontendBucketName:
     Description: S3 bucket storing CyberNet frontend files

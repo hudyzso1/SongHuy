@@ -148,21 +148,7 @@
                 machineName: data.machineName
             });
         }
-        async function registerWithAws(username, password) {
-    const res = await fetch(`${CLOUD_API_URL}/api/auth/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
-    });
 
-    const data = await res.json();
-
-    if (!res.ok || data.error || data.success === false) {
-        throw new Error(data.error || data.message || "Đăng ký AWS thất bại");
-    }
-
-    return data;
-}
         async function registerWithLocal(username, password) {
             const res = await fetch(`${SERVER_URL}/api/register`, {
                 method: 'POST',
@@ -197,19 +183,10 @@
                 if (isRegisterMode) {
                     // Hiện tại đăng ký vẫn đi qua Local Edge Server.
                     // Bước sau mình sẽ đưa /api/register lên AWS.
-                    let data;
-
-try {
-    data = await registerWithAws(u, p);
-    console.log("Đăng ký AWS thành công");
-} catch (awsError) {
-    console.warn("AWS register lỗi, thử Local Edge Server:", awsError.message);
-    data = await registerWithLocal(u, p);
-}
-
-alert(data.msg || data.message || "Đăng ký thành công");
-toggleAuthMode();
-return;
+                    const data = await registerWithLocal(u, p);
+                    alert(data.msg || data.message || "Đăng ký thành công");
+                    toggleAuthMode();
+                    return;
                 }
 
                 let user;

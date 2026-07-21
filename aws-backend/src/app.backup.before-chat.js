@@ -513,42 +513,23 @@ async function listChatMessages() {
 }
 
 async function createChatMessage(body) {
-    const username =
-        body.username ||
-        body.user ||
-        body.sender ||
-        body.from ||
-        body.machineName ||
-        "unknown";
-
-    const message =
-        body.message ||
-        body.text ||
-        body.content ||
-        body.msg ||
-        body.chat ||
-        body.chatMessage ||
-        body.messageText ||
-        body.value ||
-        "";
+    const username = body.username || body.user || body.sender || "unknown";
+    const message = body.message || body.text || body.content || "";
 
     if (!String(message).trim()) {
         return {
             success: false,
-            message: "Nội dung chat không được rỗng",
-            receivedBody: body
+            message: "Nội dung chat không được rỗng"
         };
     }
 
     const item = {
         id: makeId(),
-        username: String(username),
-        sender: String(username),
-        from: String(username),
-        message: String(message),
-        text: String(message),
-        content: String(message),
-        msg: String(message),
+        username,
+        sender: username,
+        message,
+        text: message,
+        content: message,
         createdAt: nowIso()
     };
 
