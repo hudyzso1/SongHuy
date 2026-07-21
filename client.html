@@ -2720,4 +2720,580 @@
 </script>
 <!-- AWS_SCREEN_CAPTURE_API_END -->
 </body>
-</html> 
+</html>
+<!-- PAYOS_CLIENT_TOPUP_START -->
+<style>
+#payos-floating-topup {
+    position: fixed !important;
+    left: 18px !important;
+    bottom: 95px !important;
+    z-index: 2147483647 !important;
+    width: 280px !important;
+    padding: 14px !important;
+    border: 1px solid rgba(34, 211, 238, .55) !important;
+    border-radius: 16px !important;
+    background: rgba(2, 6, 23, .96) !important;
+    box-shadow: 0 0 22px rgba(34, 211, 238, .35) !important;
+    color: #e5e7eb !important;
+    font-family: Arial, sans-serif !important;
+}
+#payos-floating-topup h3 {
+    margin: 0 0 8px 0 !important;
+    color: #22d3ee !important;
+    font-size: 16px !important;
+    font-weight: 900 !important;
+}
+#payos-floating-topup input {
+    width: 100% !important;
+    padding: 9px 10px !important;
+    border-radius: 10px !important;
+    border: 1px solid rgba(34, 211, 238, .35) !important;
+    background: #020617 !important;
+    color: white !important;
+    outline: none !important;
+    margin-bottom: 8px !important;
+    box-sizing: border-box !important;
+}
+#payos-floating-topup button {
+    border: 0 !important;
+    border-radius: 9px !important;
+    padding: 8px 10px !important;
+    cursor: pointer !important;
+    font-weight: 900 !important;
+    color: white !important;
+    background: #0891b2 !important;
+}
+.payos-money-row {
+    display: flex !important;
+    gap: 6px !important;
+    margin-bottom: 8px !important;
+}
+.payos-money-row button {
+    flex: 1 !important;
+    font-size: 11px !important;
+    background: #0f172a !important;
+    color: #67e8f9 !important;
+    border: 1px solid rgba(34, 211, 238, .35) !important;
+}
+.payos-full-btn {
+    width: 100% !important;
+    margin-top: 6px !important;
+}
+#payos-status {
+    margin-top: 8px !important;
+    font-size: 12px !important;
+    color: #94a3b8 !important;
+    line-height: 1.4 !important;
+}
+</style>
+
+<script>
+(function () {
+    const CLOUD_API_URL =
+        window.CYBERNET_CONFIG?.CLOUD_API_URL ||
+        "https://kdp4o8qcb1.execute-api.ap-southeast-1.amazonaws.com";
+
+    function getUsername() {
+        return String(
+            localStorage.getItem("session_user") ||
+            sessionStorage.getItem("session_user") ||
+            localStorage.getItem("username") ||
+            sessionStorage.getItem("username") ||
+            "may01"
+        ).trim().toLowerCase();
+    }
+
+    function getCartItems() {
+        try {
+            const cart = JSON.parse(localStorage.getItem("final_aws_food_cart") || "[]");
+            return Array.isArray(cart) ? cart : [];
+        } catch {
+            return [];
+        }
+    }
+
+    function cartTotal(items) {
+        return items.reduce((sum, item) => {
+            return sum + Number(item.price || 0) * Number(item.quantity || item.qty || 1);
+        }, 0);
+    }
+
+    function ensurePayosFloatingTopup() {
+        if (document.getElementById("payos-floating-topup")) return;
+
+        const box = document.createElement("div");
+        box.id = "payos-floating-topup";
+        box.innerHTML = `
+            <h3>💳 PAYOS</h3>
+            <div style="font-size:12px;color:#94a3b8;margin-bottom:8px;">
+                Máy: <b id="payos-current-machine" style="color:#22d3ee;"></b>
+            </div>
+
+            <input id="payos-amount-input" type="number" min="1000" step="1000" placeholder="Nạp tiền máy...">
+
+            <div class="payos-money-row">
+                <button type="button" data-payos-money="10000">10k</button>
+                <button type="button" data-payos-money="20000">20k</button>
+                <button type="button" data-payos-money="50000">50k</button>
+            </div>
+
+            <button id="payos-main-btn" class="payos-full-btn" type="button">NẠP TIỀN PAYOS</button>
+            <button id="payos-cart-btn" class="payos-full-btn" type="button">THANH TOÁN GIỎ HÀNG PAYOS</button>
+
+            <div id="payos-status">Sẵn sàng tạo link thanh toán.</div>
+        `;
+
+        document.body.appendChild(box);
+
+        document.getElementById("payos-current-machine").innerText = getUsername().toUpperCase();
+
+        box.querySelectorAll("[data-payos-money]").forEach(btn => {
+            btn.addEventListener("click", function () {
+                document.getElementById("payos-amount-input").value = this.dataset.payosMoney;
+            });
+        });
+
+        document.getElementById("payos-main-btn").addEventListener("click", createPayosTopup);
+        document.getElementById("payos-cart-btn").addEventListener("click", createPayosFoodOrder);
+    }
+
+    async function redirectToPayos(url) {
+        window.location.href = url;
+    }
+
+    async function createPayosTopup() {
+        const username = getUsername();
+        const amount = Number(document.getElementById("payos-amount-input").value || 0);
+        const status = document.getElementById("payos-status");
+        const btn = document.getElementById("payos-main-btn");
+
+        if (!amount || amount < 1000) {
+            alert("Số tiền nạp tối thiểu là 1.000đ");
+            return;
+        }
+
+        btn.disabled = true;
+        btn.innerText = "ĐANG TẠO...";
+        status.innerText = "Đang tạo link nạp tiền PayOS...";
+        status.style.color = "#fbbf24";
+
+        try {
+            const res = await fetch(`${CLOUD_API_URL}/api/payos/create-payment`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ username, amount })
+            });
+
+            const data = await res.json().catch(() => ({}));
+
+            if (!res.ok || !data.success) {
+                throw new Error(data.message || "Không tạo được link PayOS");
+            }
+
+            localStorage.setItem("payos_pending_order_code", String(data.order?.orderCode || ""));
+            await redirectToPayos(data.checkoutUrl);
+        } catch (err) {
+            status.innerText = "Lỗi: " + err.message;
+            status.style.color = "#f87171";
+        } finally {
+            btn.disabled = false;
+            btn.innerText = "NẠP TIỀN PAYOS";
+        }
+    }
+
+    async function createPayosFoodOrder() {
+        const username = getUsername();
+        const items = getCartItems();
+        const total = cartTotal(items);
+        const status = document.getElementById("payos-status");
+        const btn = document.getElementById("payos-cart-btn");
+
+        if (!items.length || total < 1000) {
+            alert("Giỏ hàng đang trống hoặc tổng tiền không hợp lệ");
+            return;
+        }
+
+        btn.disabled = true;
+        btn.innerText = "ĐANG TẠO...";
+        status.innerText = "Đang tạo link thanh toán giỏ hàng...";
+        status.style.color = "#fbbf24";
+
+        try {
+            const res = await fetch(`${CLOUD_API_URL}/api/payos/food-order`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    username,
+                    items,
+                    amount: total,
+                    total
+                })
+            });
+
+            const data = await res.json().catch(() => ({}));
+
+            if (!res.ok || !data.success) {
+                throw new Error(data.message || "Không tạo được link thanh toán giỏ hàng");
+            }
+
+            localStorage.setItem("payos_pending_food_order_code", String(data.order?.orderCode || ""));
+            await redirectToPayos(data.checkoutUrl);
+        } catch (err) {
+            status.innerText = "Lỗi: " + err.message;
+            status.style.color = "#f87171";
+        } finally {
+            btn.disabled = false;
+            btn.innerText = "THANH TOÁN GIỎ HÀNG PAYOS";
+        }
+    }
+
+    window.cybernetShowPayosTopup = ensurePayosFloatingTopup;
+    window.cybernetCreatePayosPayment = createPayosTopup;
+    window.cybernetCreatePayosFoodOrder = createPayosFoodOrder;
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", ensurePayosFloatingTopup);
+    } else {
+        ensurePayosFloatingTopup();
+    }
+
+    console.log("CyberNet PayOS topup and food order enabled");
+})();
+</script>
+<!-- PAYOS_CLIENT_TOPUP_END -->
+<!-- PAYOS_ORDER_FLOW_START -->
+<script>
+(function () {
+    const CLOUD_API_URL =
+        window.CYBERNET_CONFIG?.CLOUD_API_URL ||
+        "https://kdp4o8qcb1.execute-api.ap-southeast-1.amazonaws.com";
+
+    function getUsername() {
+        return String(
+            localStorage.getItem("session_user") ||
+            sessionStorage.getItem("session_user") ||
+            localStorage.getItem("username") ||
+            sessionStorage.getItem("username") ||
+            "may01"
+        ).trim().toLowerCase();
+    }
+
+    function readCartFromLocalStorage() {
+        const keys = [
+            "final_aws_food_cart",
+            "aws_food_cart",
+            "cart",
+            "cybernet_cart",
+            "food_cart"
+        ];
+
+        for (const key of keys) {
+            try {
+                const value = localStorage.getItem(key);
+                if (!value) continue;
+
+                const cart = JSON.parse(value);
+                if (Array.isArray(cart) && cart.length) {
+                    return cart;
+                }
+            } catch {}
+        }
+
+        return [];
+    }
+
+    function normalizeCartItems(cart) {
+        return cart.map(item => {
+            return {
+                name: String(
+                    item.name ||
+                    item.productName ||
+                    item.title ||
+                    item.product_name ||
+                    "Món ăn"
+                ).slice(0, 50),
+
+                quantity: Math.max(1, Number(
+                    item.quantity ||
+                    item.qty ||
+                    item.count ||
+                    1
+                )),
+
+                price: Math.max(0, Math.round(Number(
+                    item.price ||
+                    item.amount ||
+                    item.unitPrice ||
+                    0
+                )))
+            };
+        }).filter(item => item.price > 0);
+    }
+
+    function calcTotal(items) {
+        return items.reduce((sum, item) => {
+            return sum + Number(item.price || 0) * Number(item.quantity || 1);
+        }, 0);
+    }
+
+    function showOrderPayosNotice(text, color) {
+        let box = document.getElementById("payos-order-notice");
+
+        if (!box) {
+            box = document.createElement("div");
+            box.id = "payos-order-notice";
+            box.style.cssText = `
+                position: fixed;
+                left: 50%;
+                top: 24px;
+                transform: translateX(-50%);
+                z-index: 2147483647;
+                min-width: 320px;
+                max-width: 520px;
+                padding: 14px 16px;
+                border-radius: 16px;
+                background: rgba(2, 6, 23, .97);
+                color: white;
+                border: 1px solid rgba(34,211,238,.55);
+                box-shadow: 0 0 22px rgba(34,211,238,.35);
+                font-size: 14px;
+                font-weight: 800;
+                line-height: 1.45;
+                text-align: center;
+            `;
+            document.body.appendChild(box);
+        }
+
+        box.style.color = color || "#e5e7eb";
+        box.innerText = text;
+    }
+
+    async function createFoodOrderAndOpenPayos() {
+        const username = getUsername();
+        const rawCart = readCartFromLocalStorage();
+        const items = normalizeCartItems(rawCart);
+        const total = calcTotal(items);
+
+        if (!items.length || total < 1000) {
+            alert("Giỏ hàng đang trống hoặc tổng tiền không hợp lệ.");
+            return;
+        }
+
+        const ok = confirm(
+            `Xác nhận đặt món và thanh toán PayOS?\n\nTổng tiền: ${total.toLocaleString("vi-VN")}đ`
+        );
+
+        if (!ok) return;
+
+        showOrderPayosNotice("Đang tạo mã chuyển khoản PayOS...", "#fbbf24");
+
+        try {
+            const res = await fetch(`${CLOUD_API_URL}/api/payos/food-order`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    username,
+                    items,
+                    amount: total,
+                    total
+                })
+            });
+
+            const data = await res.json().catch(() => ({}));
+
+            if (!res.ok || !data.success || !data.checkoutUrl) {
+                throw new Error(data.message || "Không tạo được mã PayOS cho đơn món ăn.");
+            }
+
+            localStorage.setItem("payos_pending_food_order_code", String(data.order?.orderCode || ""));
+            localStorage.setItem("payos_pending_food_order_total", String(total));
+            localStorage.setItem("payos_pending_food_order_items", JSON.stringify(items));
+
+            showOrderPayosNotice("Đã tạo mã PayOS. Đang chuyển sang trang thanh toán...", "#34d399");
+
+            setTimeout(function () {
+                window.location.href = data.checkoutUrl;
+            }, 500);
+        } catch (err) {
+            console.error("Create PayOS food order failed:", err);
+            showOrderPayosNotice("Lỗi tạo mã PayOS: " + err.message, "#f87171");
+        }
+    }
+
+    function isPlaceOrderButton(el) {
+        if (!el) return false;
+
+        const text = String(el.innerText || el.value || "").trim().toUpperCase();
+
+        return (
+            text.includes("ĐẶT MÓN") ||
+            text.includes("DAT MON") ||
+            text.includes("ĐẶT HÀNG") ||
+            text.includes("THANH TOÁN")
+        );
+    }
+
+    function hookPlaceOrderButtons() {
+        document.addEventListener("click", function (e) {
+            const btn = e.target.closest("button, a, input[type='button'], input[type='submit']");
+            if (!btn) return;
+
+            if (!isPlaceOrderButton(btn)) return;
+
+            const text = String(btn.innerText || btn.value || "").toUpperCase();
+
+            // Không chặn nút nạp tiền máy riêng
+            if (text.includes("NẠP TIỀN") || text.includes("NAP TIEN")) return;
+
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+
+            createFoodOrderAndOpenPayos();
+        }, true);
+    }
+
+    window.cybernetCreateFoodOrderPayos = createFoodOrderAndOpenPayos;
+
+    hookPlaceOrderButtons();
+
+    console.log("CyberNet PayOS order flow enabled: ĐẶT MÓN -> PAYOS");
+})();
+</script>
+<!-- PAYOS_ORDER_FLOW_END -->
+<!-- PAYOS_CART_CLEAR_FIX_START -->
+<script>
+(function () {
+    const CLOUD_API_URL =
+        window.CYBERNET_CONFIG?.CLOUD_API_URL ||
+        "https://kdp4o8qcb1.execute-api.ap-southeast-1.amazonaws.com";
+
+    const CART_KEYS = [
+        "final_aws_food_cart",
+        "aws_food_cart",
+        "cart",
+        "cybernet_cart",
+        "food_cart"
+    ];
+
+    function clearCyberNetPaidCart() {
+        CART_KEYS.forEach(key => localStorage.removeItem(key));
+
+        try {
+            if (Array.isArray(window.finalAwsFoodCart)) window.finalAwsFoodCart.length = 0;
+            if (Array.isArray(window.awsFoodCart)) window.awsFoodCart.length = 0;
+            if (Array.isArray(window.cart)) window.cart.length = 0;
+        } catch {}
+
+        [
+            "renderAwsCart",
+            "renderFinalAwsCart",
+            "renderCart",
+            "updateCartDisplay",
+            "loadCart",
+            "renderCartItems"
+        ].forEach(fn => {
+            try {
+                if (typeof window[fn] === "function") window[fn]();
+            } catch {}
+        });
+
+        document.querySelectorAll(".cart-item, .aws-cart-item, .final-cart-item").forEach(el => el.remove());
+
+        document.querySelectorAll("*").forEach(el => {
+            const text = String(el.innerText || "").trim();
+            if (text === "Tổng: 0đ" || text === "Giỏ hàng đang trống") return;
+        });
+
+        console.log("CyberNet: paid cart cleared");
+    }
+
+    function showPayosNotice(text, color) {
+        let box = document.getElementById("payos-cart-clear-notice");
+
+        if (!box) {
+            box = document.createElement("div");
+            box.id = "payos-cart-clear-notice";
+            box.style.cssText = `
+                position: fixed;
+                right: 20px;
+                bottom: 95px;
+                z-index: 2147483647;
+                max-width: 360px;
+                padding: 12px 14px;
+                border-radius: 14px;
+                background: rgba(2, 6, 23, .97);
+                color: white;
+                border: 1px solid rgba(34,211,238,.5);
+                box-shadow: 0 0 18px rgba(34,211,238,.3);
+                font-size: 13px;
+                font-weight: 800;
+                line-height: 1.4;
+            `;
+            document.body.appendChild(box);
+        }
+
+        box.style.color = color || "#e5e7eb";
+        box.innerText = text;
+    }
+
+    async function syncAndClearFoodOrder() {
+        const params = new URLSearchParams(location.search);
+
+        const orderCode =
+            localStorage.getItem("payos_pending_food_order_code") ||
+            params.get("orderCode") ||
+            params.get("order_code");
+
+        if (!orderCode) return;
+
+        showPayosNotice("Đang xác nhận thanh toán đơn món...", "#fbbf24");
+
+        try {
+            const res = await fetch(`${CLOUD_API_URL}/api/payos/sync`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    orderCode
+                })
+            });
+
+            const data = await res.json().catch(() => ({}));
+
+            if (res.ok && data.success) {
+                clearCyberNetPaidCart();
+
+                localStorage.removeItem("payos_pending_food_order_code");
+                localStorage.removeItem("payos_pending_food_order_total");
+                localStorage.removeItem("payos_pending_food_order_items");
+
+                showPayosNotice("Thanh toán thành công. Đã xóa giỏ hàng.", "#34d399");
+
+                setTimeout(() => {
+                    location.href = location.pathname + "?v=cart-cleared-" + Date.now();
+                }, 900);
+
+                return;
+            }
+
+            showPayosNotice("Chưa xác nhận được thanh toán: " + (data.message || "PayOS chưa PAID"), "#f87171");
+        } catch (err) {
+            showPayosNotice("Lỗi xác nhận PayOS: " + err.message, "#f87171");
+        }
+    }
+
+    window.cybernetClearPaidCart = clearCyberNetPaidCart;
+    window.cybernetSyncAndClearFoodOrder = syncAndClearFoodOrder;
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", syncAndClearFoodOrder);
+    } else {
+        syncAndClearFoodOrder();
+    }
+})();
+</script>
+<!-- PAYOS_CART_CLEAR_FIX_END -->

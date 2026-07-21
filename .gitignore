@@ -47,3 +47,11 @@ Desktop.ini
 *.before-*.js
 before-ui-recovery.patch
 _backup_old/
+
+# secret env files
+aws-backend/lambda-env.json
+lambda-env.json
+
+# secret env files
+aws-backend/lambda-env.json
+lambda-env.json

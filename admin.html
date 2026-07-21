@@ -3034,3 +3034,1113 @@
 <!-- AWS_SCREEN_ADMIN_CONTROL_END -->
 </body>
 </html>
+<!-- ADMIN_ORDER_PRICE_FIX_START -->
+<style>
+#cybernet-fixed-orders {
+    margin: 14px 0;
+    padding: 12px;
+    border: 1px solid rgba(251, 146, 60, .65);
+    border-radius: 12px;
+    background: rgba(2, 6, 23, .96);
+    color: #e5e7eb;
+}
+
+#cybernet-fixed-orders h3 {
+    margin: 0 0 10px 0;
+    color: #fb923c;
+    font-size: 16px;
+    font-weight: 900;
+}
+
+.cybernet-fixed-order-card {
+    border: 1px solid rgba(251, 146, 60, .4);
+    border-radius: 12px;
+    padding: 12px;
+    margin-bottom: 10px;
+    background: rgba(15, 23, 42, .95);
+}
+
+.cybernet-fixed-order-title {
+    color: #fb923c;
+    font-weight: 900;
+    margin-bottom: 6px;
+}
+
+.cybernet-fixed-order-items {
+    font-size: 13px;
+    color: #e5e7eb;
+    line-height: 1.5;
+    margin-bottom: 8px;
+}
+
+.cybernet-fixed-order-total {
+    color: #22c55e;
+    font-weight: 900;
+    margin-bottom: 8px;
+}
+
+.cybernet-paid-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: rgba(34, 197, 94, .15);
+    border: 1px solid rgba(34, 197, 94, .55);
+    color: #4ade80;
+    font-size: 12px;
+    font-weight: 900;
+    margin-bottom: 8px;
+}
+
+.cybernet-unpaid-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: rgba(239, 68, 68, .15);
+    border: 1px solid rgba(239, 68, 68, .55);
+    color: #f87171;
+    font-size: 12px;
+    font-weight: 900;
+    margin-bottom: 8px;
+}
+
+.cybernet-fixed-order-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.cybernet-fixed-order-actions button {
+    border: 0;
+    border-radius: 8px;
+    padding: 8px 10px;
+    color: white;
+    font-weight: 900;
+    cursor: pointer;
+}
+
+.cybernet-done-btn {
+    background: #0891b2;
+}
+
+.cybernet-cancel-btn {
+    background: #dc2626;
+}
+</style>
+
+<script>
+(function () {
+    const CLOUD_API_URL =
+        window.CYBERNET_CONFIG?.CLOUD_API_URL ||
+        "https://kdp4o8qcb1.execute-api.ap-southeast-1.amazonaws.com";
+
+    function money(v) {
+        return Number(v || 0).toLocaleString("vi-VN") + "đ";
+    }
+
+    function extractOrders(data) {
+        if (Array.isArray(data)) return data;
+        if (Array.isArray(data.orders)) return data.orders;
+        if (Array.isArray(data.items)) return data.items;
+        if (Array.isArray(data.data)) return data.data;
+        return [];
+    }
+
+    function getOrderItems(order) {
+        const raw =
+            order.items ||
+            order.cartItems ||
+            order.orderItems ||
+            order.products ||
+            [];
+
+        if (Array.isArray(raw) && raw.length) {
+            return raw.map(item => ({
+                name: item.name || item.productName || item.title || item.product_name || "Món ăn",
+                quantity: Number(item.quantity || item.qty || item.count || 1),
+                price: Number(item.price || item.amount || item.unitPrice || 0)
+            }));
+        }
+
+        return [];
+    }
+
+    function getOrderTotal(order, items) {
+        const direct =
+            Number(order.total || 0) ||
+            Number(order.amount || 0) ||
+            Number(order.grandTotal || 0) ||
+            Number(order.totalPrice || 0);
+
+        if (direct > 0) return direct;
+
+        return items.reduce((sum, item) => {
+            return sum + Number(item.price || 0) * Number(item.quantity || 1);
+        }, 0);
+    }
+
+    function getMachineName(order) {
+        return String(
+            order.machineName ||
+            order.username ||
+            order.user ||
+            order.customerName ||
+            "MAY01"
+        ).toUpperCase();
+    }
+
+    async function updateOrderStatus(orderId, status) {
+        const res = await fetch(`${CLOUD_API_URL}/api/orders/${encodeURIComponent(orderId)}/status`, {
+            method: "PATCH",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ status })
+        });
+
+        if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.message || "Không cập nhật được đơn");
+        }
+    }
+
+    async function renderFixedOrders() {
+        let host = document.getElementById("cybernet-fixed-orders");
+
+        if (!host) {
+            host = document.createElement("div");
+            host.id = "cybernet-fixed-orders";
+
+            const target = Array.from(document.querySelectorAll("*")).find(el =>
+                String(el.innerText || "").includes("ĐƠN HÀNG AWS CHỜ XÁC NHẬN")
+            );
+
+            if (target && target.parentElement) {
+                target.parentElement.insertAdjacentElement("afterend", host);
+            } else {
+                document.body.prepend(host);
+            }
+        }
+
+        try {
+            const res = await fetch(`${CLOUD_API_URL}/api/orders?t=${Date.now()}`);
+            const data = await res.json();
+            const orders = extractOrders(data);
+
+            const visibleOrders = orders.filter(order => {
+                const status = String(order.status || "").toLowerCase();
+                const type = String(order.type || "").toLowerCase();
+
+                if (status === "done" || status === "completed" || status === "cancelled") return false;
+
+                return (
+                    type === "payos_food_order" ||
+                    Array.isArray(order.items) ||
+                    Array.isArray(order.cartItems) ||
+                    order.total ||
+                    order.amount
+                );
+            });
+
+            if (!visibleOrders.length) {
+                host.innerHTML = `
+                    <h3>🛒 ĐƠN HÀNG AWS CHỜ XÁC NHẬN</h3>
+                    <div style="color:#94a3b8;font-size:13px;">Chưa có đơn món nào.</div>
+                `;
+                return;
+            }
+
+            host.innerHTML = `
+                <h3>🛒 ĐƠN HÀNG AWS CHỜ XÁC NHẬN</h3>
+                ${visibleOrders.map(order => {
+                    const items = getOrderItems(order);
+                    const total = getOrderTotal(order, items);
+                    const paid = String(order.paymentStatus || "").toLowerCase() === "paid";
+                    const id = order.id || order.orderCode;
+
+                    return `
+                        <div class="cybernet-fixed-order-card">
+                            <div class="cybernet-fixed-order-title">${getMachineName(order)}</div>
+
+                            <div class="${paid ? "cybernet-paid-badge" : "cybernet-unpaid-badge"}">
+                                ${paid ? "ĐÃ THANH TOÁN PAYOS" : "CHỜ THANH TOÁN"}
+                            </div>
+
+                            <div class="cybernet-fixed-order-items">
+                                ${
+                                    items.length
+                                        ? items.map(item =>
+                                            `• ${item.name} x ${item.quantity} - ${money(item.price * item.quantity)}`
+                                          ).join("<br>")
+                                        : "Không đọc được danh sách món"
+                                }
+                            </div>
+
+                            <div class="cybernet-fixed-order-total">
+                                Tổng: ${money(total)}
+                            </div>
+
+                            <div class="cybernet-fixed-order-actions">
+                                <button class="cybernet-done-btn" data-order-done="${id}">Hoàn thành</button>
+                                <button class="cybernet-cancel-btn" data-order-cancel="${id}">Hủy</button>
+                            </div>
+                        </div>
+                    `;
+                }).join("")}
+            `;
+
+            host.querySelectorAll("[data-order-done]").forEach(btn => {
+                btn.addEventListener("click", async () => {
+                    try {
+                        await updateOrderStatus(btn.dataset.orderDone, "done");
+                        await renderFixedOrders();
+                    } catch (err) {
+                        alert(err.message);
+                    }
+                });
+            });
+
+            host.querySelectorAll("[data-order-cancel]").forEach(btn => {
+                btn.addEventListener("click", async () => {
+                    try {
+                        await updateOrderStatus(btn.dataset.orderCancel, "cancelled");
+                        await renderFixedOrders();
+                    } catch (err) {
+                        alert(err.message);
+                    }
+                });
+            });
+        } catch (err) {
+            host.innerHTML = `
+                <h3>🛒 ĐƠN HÀNG AWS CHỜ XÁC NHẬN</h3>
+                <div style="color:#f87171;font-size:13px;">Lỗi tải đơn: ${err.message}</div>
+            `;
+        }
+    }
+
+    window.cybernetRenderFixedOrders = renderFixedOrders;
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", renderFixedOrders);
+    } else {
+        renderFixedOrders();
+    }
+
+    setInterval(renderFixedOrders, 8000);
+})();
+</script>
+<!-- ADMIN_ORDER_PRICE_FIX_END -->
+<!-- ADMIN_SCREEN_MONITOR_RESTORE_START -->
+<style>
+#cybernet-screen-monitor {
+    margin: 14px 0;
+    padding: 14px;
+    border: 1px solid rgba(34, 211, 238, .55);
+    border-radius: 14px;
+    background: rgba(2, 6, 23, .96);
+    color: #e5e7eb;
+    box-shadow: 0 0 20px rgba(34, 211, 238, .18);
+}
+
+#cybernet-screen-monitor h3 {
+    margin: 0 0 10px 0;
+    color: #22d3ee;
+    font-size: 16px;
+    font-weight: 900;
+}
+
+.cybernet-screen-toolbar {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+
+.cybernet-screen-toolbar button,
+.cybernet-screen-card button {
+    border: 0;
+    border-radius: 8px;
+    padding: 8px 10px;
+    color: white;
+    font-weight: 900;
+    cursor: pointer;
+}
+
+.cybernet-refresh-screen-btn {
+    background: #0891b2;
+}
+
+.cybernet-stop-screen-btn {
+    background: #dc2626;
+}
+
+.cybernet-enable-screen-btn {
+    background: #16a34a;
+}
+
+.cybernet-screen-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 12px;
+}
+
+.cybernet-screen-card {
+    border: 1px solid rgba(34, 211, 238, .35);
+    border-radius: 12px;
+    padding: 10px;
+    background: rgba(15, 23, 42, .95);
+}
+
+.cybernet-screen-title {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    align-items: center;
+    color: #22d3ee;
+    font-weight: 900;
+    margin-bottom: 8px;
+}
+
+.cybernet-screen-meta {
+    color: #94a3b8;
+    font-size: 12px;
+    margin-bottom: 8px;
+}
+
+.cybernet-screen-img {
+    width: 100%;
+    max-height: 360px;
+    object-fit: contain;
+    border-radius: 10px;
+    border: 1px solid rgba(34, 211, 238, .25);
+    background: #020617;
+}
+
+.cybernet-screen-empty {
+    padding: 20px;
+    color: #94a3b8;
+    border: 1px dashed rgba(148, 163, 184, .4);
+    border-radius: 10px;
+    text-align: center;
+}
+
+.cybernet-screen-status-off {
+    color: #f87171;
+    font-weight: 900;
+}
+
+.cybernet-screen-status-on {
+    color: #4ade80;
+    font-weight: 900;
+}
+</style>
+
+<script>
+(function () {
+    const CLOUD_API_URL =
+        window.CYBERNET_CONFIG?.CLOUD_API_URL ||
+        "https://kdp4o8qcb1.execute-api.ap-southeast-1.amazonaws.com";
+
+    function getArray(data, names) {
+        if (Array.isArray(data)) return data;
+
+        for (const name of names) {
+            if (Array.isArray(data?.[name])) return data[name];
+        }
+
+        return [];
+    }
+
+    function getUsername(item) {
+        return String(
+            item.username ||
+            item.machine ||
+            item.machineName ||
+            item.user ||
+            item.id ||
+            ""
+        ).trim().toLowerCase();
+    }
+
+    function formatTime(value) {
+        if (!value) return "Chưa có ảnh";
+        try {
+            return new Date(value).toLocaleString("vi-VN");
+        } catch {
+            return String(value);
+        }
+    }
+
+    async function fetchJson(url, options) {
+        const res = await fetch(url, options);
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+            throw new Error(data.message || "Request lỗi");
+        }
+
+        return data;
+    }
+
+    async function loadScreensAndMachines() {
+        const [screensResult, machinesResult] = await Promise.allSettled([
+            fetchJson(`${CLOUD_API_URL}/api/screens?t=${Date.now()}`),
+            fetchJson(`${CLOUD_API_URL}/api/machines?t=${Date.now()}`)
+        ]);
+
+        const screens =
+            screensResult.status === "fulfilled"
+                ? getArray(screensResult.value, ["screens", "items", "data"])
+                : [];
+
+        const machines =
+            machinesResult.status === "fulfilled"
+                ? getArray(machinesResult.value, ["machines", "items", "data"])
+                : [];
+
+        const map = new Map();
+
+        machines.forEach(machine => {
+            const username = getUsername(machine);
+            if (!username || username === "admin") return;
+
+            map.set(username, {
+                ...machine,
+                username
+            });
+        });
+
+        screens.forEach(screen => {
+            const username = getUsername(screen);
+            if (!username || username === "admin") return;
+
+            map.set(username, {
+                ...(map.get(username) || {}),
+                ...screen,
+                username
+            });
+        });
+
+        return Array.from(map.values());
+    }
+
+    async function setScreenEnabled(username, enabled) {
+        const path = enabled
+            ? `/api/screens/${encodeURIComponent(username)}/enable`
+            : `/api/screens/${encodeURIComponent(username)}/stop`;
+
+        await fetchJson(`${CLOUD_API_URL}${path}`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                username
+            })
+        });
+    }
+
+    async function renderScreenMonitor() {
+        let host = document.getElementById("cybernet-screen-monitor");
+
+        if (!host) {
+            host = document.createElement("div");
+            host.id = "cybernet-screen-monitor";
+
+            const bodyFirst = document.body.firstElementChild;
+            if (bodyFirst) {
+                bodyFirst.insertAdjacentElement("beforebegin", host);
+            } else {
+                document.body.appendChild(host);
+            }
+        }
+
+        host.innerHTML = `
+            <h3>🖥️ XEM MÀN HÌNH MÁY KHÁCH AWS</h3>
+            <div class="cybernet-screen-toolbar">
+                <button class="cybernet-refresh-screen-btn" id="cybernet-refresh-screen-btn">
+                    CẬP NHẬT MÀN HÌNH AWS
+                </button>
+            </div>
+            <div class="cybernet-screen-empty">Đang tải danh sách màn hình...</div>
+        `;
+
+        document.getElementById("cybernet-refresh-screen-btn").onclick = renderScreenMonitor;
+
+        try {
+            const list = await loadScreensAndMachines();
+
+            if (!list.length) {
+                host.querySelector(".cybernet-screen-empty").innerText =
+                    "Chưa có máy khách nào gửi màn hình. Hãy chạy edge-screen-agent.js ở máy khách.";
+                return;
+            }
+
+            host.innerHTML = `
+                <h3>🖥️ XEM MÀN HÌNH MÁY KHÁCH AWS</h3>
+                <div class="cybernet-screen-toolbar">
+                    <button class="cybernet-refresh-screen-btn" id="cybernet-refresh-screen-btn">
+                        CẬP NHẬT MÀN HÌNH AWS
+                    </button>
+                </div>
+
+                <div class="cybernet-screen-grid">
+                    ${list.map(item => {
+                        const username = getUsername(item);
+                        const enabled = item.screenEnabled !== false;
+                        const updatedAt =
+                            item.latestScreenUpdatedAt ||
+                            item.updatedAt ||
+                            item.createdAt ||
+                            "";
+
+                        const imageUrl =
+                            `${CLOUD_API_URL}/api/screens/${encodeURIComponent(username)}/image?ts=${Date.now()}`;
+
+                        return `
+                            <div class="cybernet-screen-card">
+                                <div class="cybernet-screen-title">
+                                    <span>${String(username).toUpperCase()}</span>
+                                    <span class="${enabled ? "cybernet-screen-status-on" : "cybernet-screen-status-off"}">
+                                        ${enabled ? "ĐANG BẬT" : "ĐÃ TẮT"}
+                                    </span>
+                                </div>
+
+                                <div class="cybernet-screen-meta">
+                                    Cập nhật: ${formatTime(updatedAt)}
+                                </div>
+
+                                ${
+                                    enabled
+                                        ? `<img class="cybernet-screen-img"
+                                                src="${imageUrl}"
+                                                alt="Màn hình ${username}"
+                                                onerror="this.replaceWith(Object.assign(document.createElement('div'), {className:'cybernet-screen-empty', innerText:'Chưa có ảnh màn hình hoặc agent chưa chạy.'}))">`
+                                        : `<div class="cybernet-screen-empty">Màn hình máy này đang bị admin tắt.</div>`
+                                }
+
+                                <div class="cybernet-screen-toolbar" style="margin-top:10px;margin-bottom:0;">
+                                    <button class="cybernet-refresh-screen-btn" data-refresh-one="${username}">
+                                        Cập nhật
+                                    </button>
+                                    ${
+                                        enabled
+                                            ? `<button class="cybernet-stop-screen-btn" data-stop-screen="${username}">Tắt màn hình</button>`
+                                            : `<button class="cybernet-enable-screen-btn" data-enable-screen="${username}">Bật lại</button>`
+                                    }
+                                </div>
+                            </div>
+                        `;
+                    }).join("")}
+                </div>
+            `;
+
+            document.getElementById("cybernet-refresh-screen-btn").onclick = renderScreenMonitor;
+
+            host.querySelectorAll("[data-refresh-one]").forEach(btn => {
+                btn.onclick = renderScreenMonitor;
+            });
+
+            host.querySelectorAll("[data-stop-screen]").forEach(btn => {
+                btn.onclick = async () => {
+                    await setScreenEnabled(btn.dataset.stopScreen, false);
+                    await renderScreenMonitor();
+                };
+            });
+
+            host.querySelectorAll("[data-enable-screen]").forEach(btn => {
+                btn.onclick = async () => {
+                    await setScreenEnabled(btn.dataset.enableScreen, true);
+                    await renderScreenMonitor();
+                };
+            });
+        } catch (err) {
+            host.innerHTML = `
+                <h3>🖥️ XEM MÀN HÌNH MÁY KHÁCH AWS</h3>
+                <div class="cybernet-screen-toolbar">
+                    <button class="cybernet-refresh-screen-btn" onclick="cybernetRenderScreenMonitor()">
+                        CẬP NHẬT MÀN HÌNH AWS
+                    </button>
+                </div>
+                <div class="cybernet-screen-empty" style="color:#f87171;">
+                    Lỗi tải màn hình: ${err.message}
+                </div>
+            `;
+        }
+    }
+
+    window.cybernetRenderScreenMonitor = renderScreenMonitor;
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", renderScreenMonitor);
+    } else {
+        renderScreenMonitor();
+    }
+
+    console.log("CyberNet admin screen monitor restored");
+})();
+</script>
+<!-- ADMIN_SCREEN_MONITOR_RESTORE_END -->
+<!-- ADMIN_PAYOS_FOOD_MONEY_FIX_START -->
+<style>
+#cybernet-payos-food-orders-fixed {
+    margin: 14px 0;
+    padding: 14px;
+    border: 1px solid rgba(251, 146, 60, .65);
+    border-radius: 14px;
+    background: rgba(2, 6, 23, .97);
+    color: #e5e7eb;
+    box-shadow: 0 0 18px rgba(251, 146, 60, .18);
+}
+
+#cybernet-payos-food-orders-fixed h3 {
+    margin: 0 0 10px 0;
+    color: #fb923c;
+    font-size: 16px;
+    font-weight: 900;
+}
+
+.payos-food-card {
+    border: 1px solid rgba(251, 146, 60, .35);
+    border-radius: 12px;
+    padding: 12px;
+    margin-bottom: 10px;
+    background: rgba(15, 23, 42, .96);
+}
+
+.payos-food-title {
+    color: #fb923c;
+    font-weight: 900;
+    margin-bottom: 6px;
+}
+
+.payos-food-badge-paid {
+    display: inline-block;
+    padding: 3px 8px;
+    margin-bottom: 8px;
+    border-radius: 999px;
+    background: rgba(34, 197, 94, .14);
+    border: 1px solid rgba(34, 197, 94, .55);
+    color: #4ade80;
+    font-size: 12px;
+    font-weight: 900;
+}
+
+.payos-food-badge-pending {
+    display: inline-block;
+    padding: 3px 8px;
+    margin-bottom: 8px;
+    border-radius: 999px;
+    background: rgba(234, 179, 8, .14);
+    border: 1px solid rgba(234, 179, 8, .55);
+    color: #facc15;
+    font-size: 12px;
+    font-weight: 900;
+}
+
+.payos-food-items {
+    margin: 8px 0;
+    line-height: 1.55;
+    font-size: 13px;
+    color: #e5e7eb;
+}
+
+.payos-food-total {
+    color: #22c55e;
+    font-size: 15px;
+    font-weight: 900;
+    margin-top: 8px;
+}
+
+.payos-food-meta {
+    color: #94a3b8;
+    font-size: 12px;
+    margin-top: 6px;
+}
+
+.payos-food-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+}
+
+.payos-food-actions button {
+    border: 0;
+    border-radius: 8px;
+    padding: 8px 10px;
+    color: white;
+    font-weight: 900;
+    cursor: pointer;
+}
+
+.payos-food-refresh {
+    background: #0891b2;
+}
+
+.payos-food-done {
+    background: #16a34a;
+}
+
+.payos-food-cancel {
+    background: #dc2626;
+}
+</style>
+
+<script>
+(function () {
+    const CLOUD_API_URL =
+        window.CYBERNET_CONFIG?.CLOUD_API_URL ||
+        "https://kdp4o8qcb1.execute-api.ap-southeast-1.amazonaws.com";
+
+    function unwrapDdb(value) {
+        if (value === null || value === undefined) return value;
+
+        if (Array.isArray(value)) {
+            return value.map(unwrapDdb);
+        }
+
+        if (typeof value !== "object") return value;
+
+        if (Object.keys(value).length === 1) {
+            if ("S" in value) return value.S;
+            if ("N" in value) return Number(value.N);
+            if ("BOOL" in value) return Boolean(value.BOOL);
+            if ("NULL" in value) return null;
+            if ("L" in value) return value.L.map(unwrapDdb);
+            if ("M" in value) return unwrapDdb(value.M);
+        }
+
+        const out = {};
+        Object.keys(value).forEach(k => {
+            out[k] = unwrapDdb(value[k]);
+        });
+        return out;
+    }
+
+    function parseMaybeJson(value) {
+        if (typeof value !== "string") return value;
+
+        try {
+            return JSON.parse(value);
+        } catch {
+            return value;
+        }
+    }
+
+    function numberMoney(value) {
+        if (value === null || value === undefined) return 0;
+
+        if (typeof value === "number") return value;
+
+        if (typeof value === "string") {
+            const cleaned = value.replace(/[^\d.-]/g, "");
+            return Number(cleaned || 0);
+        }
+
+        return Number(value || 0);
+    }
+
+    function money(value) {
+        return numberMoney(value).toLocaleString("vi-VN") + "đ";
+    }
+
+    function extractOrders(raw) {
+        const data = unwrapDdb(raw);
+
+        if (Array.isArray(data)) return data;
+
+        if (Array.isArray(data.orders)) return data.orders;
+        if (Array.isArray(data.items)) return data.items;
+        if (Array.isArray(data.Items)) return data.Items;
+        if (Array.isArray(data.data)) return data.data;
+
+        return [];
+    }
+
+    function getItems(order) {
+        let raw =
+            order.items ||
+            order.cartItems ||
+            order.orderItems ||
+            order.products ||
+            [];
+
+        raw = parseMaybeJson(raw);
+        raw = unwrapDdb(raw);
+
+        if (!Array.isArray(raw)) return [];
+
+        return raw.map(item => {
+            item = unwrapDdb(item);
+
+            return {
+                name: String(
+                    item.name ||
+                    item.productName ||
+                    item.title ||
+                    item.product_name ||
+                    "Món ăn"
+                ),
+
+                quantity: Math.max(1, Number(
+                    item.quantity ||
+                    item.qty ||
+                    item.count ||
+                    1
+                )),
+
+                price: numberMoney(
+                    item.price ||
+                    item.unitPrice ||
+                    item.amount ||
+                    0
+                )
+            };
+        });
+    }
+
+    function getTotal(order, items) {
+        const direct =
+            numberMoney(order.total) ||
+            numberMoney(order.amount) ||
+            numberMoney(order.grandTotal) ||
+            numberMoney(order.totalPrice) ||
+            numberMoney(order.payosPaidRaw?.data?.amountPaid) ||
+            numberMoney(order.payosPaidRaw?.data?.amount) ||
+            numberMoney(order.payosPaidRaw?.data?.transactions?.[0]?.amount);
+
+        if (direct > 0) return direct;
+
+        return items.reduce((sum, item) => {
+            return sum + numberMoney(item.price) * Number(item.quantity || 1);
+        }, 0);
+    }
+
+    function getMachine(order) {
+        return String(
+            order.machineName ||
+            order.username ||
+            order.user ||
+            order.customerName ||
+            "MAY01"
+        ).toUpperCase();
+    }
+
+    function getOrderId(order) {
+        return String(order.id || order.orderCode || "");
+    }
+
+    function isFoodPayosOrder(order) {
+        const type = String(order.type || "").toLowerCase();
+        const provider = String(order.paymentProvider || "").toLowerCase();
+
+        if (type === "payos_topup") return false;
+
+        return (
+            type === "payos_food_order" ||
+            provider === "payos" && (
+                Array.isArray(order.items) ||
+                Array.isArray(order.cartItems) ||
+                order.items ||
+                order.cartItems
+            )
+        );
+    }
+
+    async function syncPayosOrder(order) {
+        const orderCode = order.orderCode || order.id;
+        if (!orderCode) return;
+
+        const paymentStatus = String(order.paymentStatus || "").toLowerCase();
+        if (paymentStatus === "paid") return;
+
+        try {
+            await fetch(`${CLOUD_API_URL}/api/payos/sync`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    orderCode
+                })
+            });
+        } catch {}
+    }
+
+    async function updateOrderStatus(orderId, status) {
+        const res = await fetch(`${CLOUD_API_URL}/api/orders/${encodeURIComponent(orderId)}/status`, {
+            method: "PATCH",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                status
+            })
+        });
+
+        if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.message || "Không cập nhật được đơn hàng");
+        }
+    }
+
+    async function renderPayosFoodOrdersFixed() {
+        let host = document.getElementById("cybernet-payos-food-orders-fixed");
+
+        if (!host) {
+            host = document.createElement("div");
+            host.id = "cybernet-payos-food-orders-fixed";
+
+            const target = Array.from(document.querySelectorAll("h1,h2,h3,h4,div,section")).find(el =>
+                String(el.innerText || "").includes("ĐƠN HÀNG AWS CHỜ XÁC NHẬN")
+            );
+
+            if (target && target !== document.body) {
+                target.insertAdjacentElement("beforebegin", host);
+            } else {
+                document.body.prepend(host);
+            }
+        }
+
+        host.innerHTML = `
+            <h3>🧾 ĐƠN MÓN PAYOS - HIỂN THỊ ĐÚNG TIỀN</h3>
+            <div style="color:#94a3b8;font-size:13px;">Đang tải đơn món...</div>
+        `;
+
+        try {
+            const res = await fetch(`${CLOUD_API_URL}/api/orders?t=${Date.now()}`);
+            const raw = await res.json();
+            let orders = extractOrders(raw).map(unwrapDdb);
+
+            orders = orders.filter(order => {
+                const status = String(order.status || "").toLowerCase();
+
+                if (status === "done" || status === "completed" || status === "cancelled") {
+                    return false;
+                }
+
+                return isFoodPayosOrder(order);
+            });
+
+            await Promise.all(orders.map(syncPayosOrder));
+
+            const res2 = await fetch(`${CLOUD_API_URL}/api/orders?t=${Date.now()}`);
+            const raw2 = await res2.json();
+            orders = extractOrders(raw2).map(unwrapDdb).filter(order => {
+                const status = String(order.status || "").toLowerCase();
+
+                if (status === "done" || status === "completed" || status === "cancelled") {
+                    return false;
+                }
+
+                return isFoodPayosOrder(order);
+            });
+
+            if (!orders.length) {
+                host.innerHTML = `
+                    <h3>🧾 ĐƠN MÓN PAYOS - HIỂN THỊ ĐÚNG TIỀN</h3>
+                    <div style="color:#94a3b8;font-size:13px;">Chưa có đơn món PayOS nào.</div>
+                    <div class="payos-food-actions">
+                        <button class="payos-food-refresh" id="payos-food-refresh-btn">Cập nhật</button>
+                    </div>
+                `;
+
+                document.getElementById("payos-food-refresh-btn").onclick = renderPayosFoodOrdersFixed;
+                return;
+            }
+
+            host.innerHTML = `
+                <h3>🧾 ĐƠN MÓN PAYOS - HIỂN THỊ ĐÚNG TIỀN</h3>
+
+                <div class="payos-food-actions" style="margin-bottom:10px;">
+                    <button class="payos-food-refresh" id="payos-food-refresh-btn">Cập nhật đơn PayOS</button>
+                </div>
+
+                ${orders.map(order => {
+                    const items = getItems(order);
+                    const total = getTotal(order, items);
+                    const paid = String(order.paymentStatus || "").toLowerCase() === "paid";
+                    const id = getOrderId(order);
+
+                    return `
+                        <div class="payos-food-card">
+                            <div class="payos-food-title">${getMachine(order)}</div>
+
+                            <div class="${paid ? "payos-food-badge-paid" : "payos-food-badge-pending"}">
+                                ${paid ? "ĐÃ THANH TOÁN PAYOS" : "CHỜ THANH TOÁN PAYOS"}
+                            </div>
+
+                            <div class="payos-food-items">
+                                ${
+                                    items.length
+                                        ? items.map(item =>
+                                            `• ${item.name} x ${item.quantity} - ${money(item.price * item.quantity)}`
+                                          ).join("<br>")
+                                        : "Không đọc được danh sách món trong đơn này"
+                                }
+                            </div>
+
+                            <div class="payos-food-total">
+                                Tổng tiền món: ${money(total)}
+                            </div>
+
+                            <div class="payos-food-meta">
+                                OrderCode: ${order.orderCode || order.id || "N/A"}<br>
+                                Tạo lúc: ${order.createdAt || "N/A"}<br>
+                                Thanh toán: ${order.paidAt || "Chưa xác nhận"}
+                            </div>
+
+                            <div class="payos-food-actions">
+                                <button class="payos-food-done" data-done-order="${id}">Hoàn thành</button>
+                                <button class="payos-food-cancel" data-cancel-order="${id}">Hủy</button>
+                            </div>
+                        </div>
+                    `;
+                }).join("")}
+            `;
+
+            document.getElementById("payos-food-refresh-btn").onclick = renderPayosFoodOrdersFixed;
+
+            host.querySelectorAll("[data-done-order]").forEach(btn => {
+                btn.onclick = async () => {
+                    try {
+                        await updateOrderStatus(btn.dataset.doneOrder, "done");
+                        await renderPayosFoodOrdersFixed();
+                    } catch (err) {
+                        alert(err.message);
+                    }
+                };
+            });
+
+            host.querySelectorAll("[data-cancel-order]").forEach(btn => {
+                btn.onclick = async () => {
+                    try {
+                        await updateOrderStatus(btn.dataset.cancelOrder, "cancelled");
+                        await renderPayosFoodOrdersFixed();
+                    } catch (err) {
+                        alert(err.message);
+                    }
+                };
+            });
+        } catch (err) {
+            host.innerHTML = `
+                <h3>🧾 ĐƠN MÓN PAYOS - HIỂN THỊ ĐÚNG TIỀN</h3>
+                <div style="color:#f87171;font-size:13px;">Lỗi tải đơn món: ${err.message}</div>
+                <div class="payos-food-actions">
+                    <button class="payos-food-refresh" onclick="cybernetRenderPayosFoodOrdersFixed()">Thử lại</button>
+                </div>
+            `;
+        }
+    }
+
+    window.cybernetRenderPayosFoodOrdersFixed = renderPayosFoodOrdersFixed;
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", renderPayosFoodOrdersFixed);
+    } else {
+        renderPayosFoodOrdersFixed();
+    }
+
+    console.log("CyberNet admin PayOS food money fix enabled");
+})();
+</script>
+<!-- ADMIN_PAYOS_FOOD_MONEY_FIX_END -->
