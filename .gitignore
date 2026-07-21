@@ -36,3 +36,14 @@ Desktop.ini
 *.backup.js
 *_backup.html
 .gitignore-folder-backup/
+
+# CyberNet temporary backup files
+*.before-*.html
+*.backup.html
+*.backup.*.html
+*.bad-ui.backup.html
+*.broken-now.html
+*.current-broken.html
+*.before-*.js
+before-ui-recovery.patch
+_backup_old/

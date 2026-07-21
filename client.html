@@ -2494,5 +2494,230 @@
 })();
 </script>
 <!-- EDGE_SAFE_MODE_END -->
+
+
+<!-- AWS_SCREEN_CAPTURE_API_START -->
+<style>
+    #aws-screen-capture-control {
+        position: fixed;
+        left: 18px;
+        bottom: 78px;
+        z-index: 999999;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        padding: 10px 12px;
+        border: 1px solid rgba(34, 211, 238, .45);
+        border-radius: 14px;
+        background: rgba(2, 6, 23, .92);
+        box-shadow: 0 0 18px rgba(34, 211, 238, .25);
+        color: #e5e7eb;
+        font-family: inherit;
+    }
+
+    #aws-screen-start-btn,
+    #aws-screen-stop-btn {
+        border: 0;
+        border-radius: 10px;
+        padding: 8px 10px;
+        cursor: pointer;
+        font-weight: 900;
+        color: white;
+        background: #0891b2;
+    }
+
+    #aws-screen-stop-btn {
+        background: #dc2626;
+    }
+
+    #aws-screen-status-text {
+        font-size: 12px;
+        color: #94a3b8;
+        white-space: nowrap;
+    }
+</style>
+
+<script>
+(function () {
+    const CLOUD_API_URL =
+        window.CYBERNET_CONFIG?.CLOUD_API_URL ||
+        "https://kdp4o8qcb1.execute-api.ap-southeast-1.amazonaws.com";
+
+    let screenStream = null;
+    let screenVideo = null;
+    let screenTimer = null;
+    let uploading = false;
+
+    function getUsername() {
+        return String(
+            localStorage.getItem("session_user") ||
+            sessionStorage.getItem("session_user") ||
+            localStorage.getItem("username") ||
+            sessionStorage.getItem("username") ||
+            "client"
+        ).trim().toLowerCase();
+    }
+
+    function getMachineName() {
+        return String(
+            localStorage.getItem("machineName") ||
+            sessionStorage.getItem("machineName") ||
+            getUsername().toUpperCase()
+        ).trim().toUpperCase();
+    }
+
+    function setStatus(text, color) {
+        const el = document.getElementById("aws-screen-status-text");
+        if (!el) return;
+
+        el.innerText = text;
+        el.style.color = color || "#94a3b8";
+    }
+
+    function ensureControl() {
+        if (document.getElementById("aws-screen-capture-control")) {
+            return;
+        }
+
+        const box = document.createElement("div");
+        box.id = "aws-screen-capture-control";
+        box.innerHTML = `
+            <button id="aws-screen-start-btn" type="button">🖥 BẬT GIÁM SÁT AWS</button>
+            <button id="aws-screen-stop-btn" type="button">TẮT</button>
+            <span id="aws-screen-status-text">Chưa bật</span>
+        `;
+
+        document.body.appendChild(box);
+
+        document.getElementById("aws-screen-start-btn").addEventListener("click", startAwsScreenCapture);
+        document.getElementById("aws-screen-stop-btn").addEventListener("click", stopAwsScreenCapture);
+    }
+
+    async function uploadFrameToAws() {
+        if (!screenVideo || !screenStream || uploading) return;
+
+        const track = screenStream.getVideoTracks()[0];
+        if (!track || track.readyState !== "live") {
+            stopAwsScreenCapture();
+            return;
+        }
+
+        if (!screenVideo.videoWidth || !screenVideo.videoHeight) {
+            return;
+        }
+
+        uploading = true;
+
+        try {
+            const canvas = document.createElement("canvas");
+
+            const maxWidth = 900;
+            const ratio = screenVideo.videoWidth / screenVideo.videoHeight;
+
+            canvas.width = maxWidth;
+            canvas.height = Math.round(maxWidth / ratio);
+
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(screenVideo, 0, 0, canvas.width, canvas.height);
+
+            const imageData = canvas.toDataURL("image/jpeg", 0.55);
+
+            const res = await fetch(`${CLOUD_API_URL}/api/client-upload-screen`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    username: getUsername(),
+                    machineName: getMachineName(),
+                    imageData
+                })
+            });
+
+            const data = await res.json().catch(() => ({}));
+
+            if (!res.ok || !data.success) {
+                console.warn("AWS screen capture upload failed:", data);
+                setStatus("Upload lỗi", "#f87171");
+                return;
+            }
+
+            console.log("AWS screen capture upload OK:", data.screenKey);
+            setStatus("Đang gửi AWS: " + new Date().toLocaleTimeString("vi-VN"), "#34d399");
+        } catch (err) {
+            console.warn("AWS screen capture upload error:", err.message);
+            setStatus("Lỗi: " + err.message, "#f87171");
+        } finally {
+            uploading = false;
+        }
+    }
+
+    async function startAwsScreenCapture() {
+        try {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+                alert("Trình duyệt không hỗ trợ chia sẻ màn hình.");
+                return;
+            }
+
+            screenStream = await navigator.mediaDevices.getDisplayMedia({
+                video: {
+                    frameRate: 1
+                },
+                audio: false
+            });
+
+            screenVideo = document.createElement("video");
+            screenVideo.srcObject = screenStream;
+            screenVideo.muted = true;
+            screenVideo.playsInline = true;
+
+            await screenVideo.play();
+
+            const track = screenStream.getVideoTracks()[0];
+            track.addEventListener("endeduted = true;
+            screenVideo.playsInline = true;
+
+            await screen", stopAwsScreenCapture);
+
+            setStatus("Đã bật, đang gửi AWS...", "#34d399");
+
+            await uploadFrameToAws();
+
+            clearInterval(screenTimer);
+            screenTimer = setInterval(uploadFrameToAws, 5000);
+
+            console.log("CyberNet AWS Screen Capture API started");
+        } catch (err) {
+            console.warn("Không bật được AWS screen capture:", err.message);
+            setStatus("Chưa cấp quyền", "#fbbf24");
+        }
+    }
+
+    function stopAwsScreenCapture() {
+        clearInterval(screenTimer);
+        screenTimer = null;
+
+        if (screenStream) {
+            screenStream.getTracks().forEach(track => track.stop());
+        }
+
+        screenStream = null;
+        screenVideo = null;
+
+        setStatus("Đã tắt", "#f87171");
+        console.log("CyberNet AWS Screen Capture API stopped");
+    }
+
+    window.startAwsScreenCapture = startAwsScreenCapture;
+    window.stopAwsScreenCapture = stopAwsScreenCapture;
+    window.uploadFrameToAws = uploadFrameToAws;
+
+    document.addEventListener("DOMContentLoaded", function () {
+        ensureControl();
+        console.log("CyberNet AWS Screen Capture API ready");
+    });
+})();
+</script>
+<!-- AWS_SCREEN_CAPTURE_API_END -->
 </body>
 </html> 

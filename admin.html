@@ -2719,5 +2719,318 @@
 })();
 </script>
 <!-- EDGE_SAFE_MODE_END -->
+
+
+
+<!-- AWS_SCREEN_ADMIN_CONTROL_START -->
+<style>
+    #aws-screen-monitor-panel {
+        margin: 24px auto;
+        max-width: 1200px;
+        padding: 20px;
+        border: 1px solid rgba(34, 211, 238, .35);
+        border-radius: 18px;
+        background: rgba(15, 23, 42, .90);
+        color: #e5e7eb;
+    }
+
+    .aws-screen-topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 14px;
+    }
+
+    .aws-screen-topbar h2 {
+        color: #22d3ee;
+        font-weight: 900;
+        font-size: 22px;
+        margin: 0;
+    }
+
+    .aws-screen-btn {
+        border: 0;
+        border-radius: 10px;
+        padding: 8px 12px;
+        cursor: pointer;
+        color: white;
+        font-weight: 900;
+        background: #0891b2;
+        margin-left: 6px;
+    }
+
+    .aws-screen-btn-danger {
+        background: #dc2626;
+    }
+
+    .aws-screen-btn-enable {
+        background: #16a34a;
+    }
+
+    .aws-main-screen-card {
+        border: 1px solid rgba(34, 211, 238, .45);
+        border-radius: 16px;
+        overflow: hidden;
+        background: #020617;
+        margin-bottom: 18px;
+    }
+
+    .aws-main-screen-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px 14px;
+        border-bottom: 1px solid rgba(34, 211, 238, .25);
+        background: rgba(8, 47, 73, .65);
+        font-size: 14px;
+    }
+
+    .aws-main-screen-image {
+        height: 430px;
+        background: #020617;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #64748b;
+    }
+
+    .aws-main-screen-image img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        display: block;
+        background: #020617;
+    }
+
+    .aws-small-machine-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+        gap: 10px;
+        margin-top: 12px;
+    }
+
+    .aws-small-machine-card {
+        border: 1px solid rgba(34, 211, 238, .22);
+        border-radius: 12px;
+        background: rgba(2, 6, 23, .8);
+        padding: 10px;
+        font-size: 12px;
+    }
+</style>
+
+<script>
+(function () {
+    const CLOUD_API_URL =
+        window.CYBERNET_CONFIG?.CLOUD_API_URL ||
+        "https://kdp4o8qcb1.execute-api.ap-southeast-1.amazonaws.com";
+
+    let loadingScreen = false;
+
+    function ensurePanel() {
+        let panel = document.getElementById("aws-screen-monitor-panel");
+
+        if (!panel) {
+            panel = document.createElement("div");
+            panel.id = "aws-screen-monitor-panel";
+
+            const machinesPanel =
+                document.getElementById("aws-machines-panel") ||
+                Array.from(document.querySelectorAll("div,h2,h3,p,span"))
+                    .find(el => String(el.innerText || "").toLowerCase().includes("aws cloud machines"));
+
+            if (machinesPanel && machinesPanel.parentNode) {
+                machinesPanel.parentNode.insertBefore(panel, machinesPanel);
+            } else {
+                document.body.appendChild(panel);
+            }
+        }
+
+        if (!panel.dataset.boundScreenControl) {
+            panel.addEventListener("click", async function (e) {
+                const stopBtn = e.target.closest(".aws-stop-screen-btn");
+                const enableBtn = e.target.closest(".aws-enable-screen-btn");
+
+                if (stopBtn) {
+                    const username = stopBtn.dataset.username;
+                    await stopScreen(username);
+                }
+
+                if (enableBtn) {
+                    const username = enableBtn.dataset.username;
+                    await enableScreen(username);
+                }
+            });
+
+            panel.dataset.boundScreenControl = "true";
+        }
+
+        return panel;
+    }
+
+    function formatTime(iso) {
+        if (!iso) return "Chưa có dữ liệu";
+        try {
+            return new Date(iso).toLocaleString("vi-VN");
+        } catch {
+            return iso;
+        }
+    }
+
+    function screenImageUrl(username) {
+        return `${CLOUD_API_URL}/api/screens/${encodeURIComponent(username)}/image?ts=${Date.now()}`;
+    }
+
+    function safe(v) {
+        return String(v || "").replaceAll('"', "&quot;");
+    }
+
+    async function stopScreen(username) {
+        if (!username) return;
+
+        const ok = confirm("Tắt màn hình máy " + username.toUpperCase() + "?");
+        if (!ok) return;
+
+        const res = await fetch(`${CLOUD_API_URL}/api/screens/${encodeURIComponent(username)}/stop`, {
+            method: "POST"
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok || !data.success) {
+            alert(data.message || "Tắt màn hình thất bại");
+            return;
+        }
+
+        alert("Đã tắt màn hình " + username.toUpperCase());
+        loadScreens();
+    }
+
+    async function enableScreen(username) {
+        if (!username) return;
+
+        const res = await fetch(`${CLOUD_API_URL}/api/screens/${encodeURIComponent(username)}/enable`, {
+            method: "POST"
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok || !data.success) {
+            alert(data.message || "Bật màn hình thất bại");
+            return;
+        }
+
+        alert("Đã bật lại màn hình " + username.toUpperCase() + ". Nếu agent đang chạy, ảnh sẽ gửi lại.");
+        loadScreens();
+    }
+
+    function renderScreens(items) {
+        const panel = ensurePanel();
+
+        const machines = items.filter(m => String(m.role || "").toLowerCase() !== "admin");
+        const hasScreens = machines.filter(m => m.latestScreenKey);
+        const noScreens = machines.filter(m => !m.latestScreenKey);
+
+        const mainHtml = hasScreens.length
+            ? hasScreens.map(machine => {
+                const username = machine.username || "";
+                const name = machine.machineName || String(username).toUpperCase();
+                const status = String(machine.status || "idle").toUpperCase();
+
+                return `
+                    <div class="aws-main-screen-card">
+                        <div class="aws-main-screen-header">
+                            <div>
+                                <b style="color:#22d3ee;">${name}</b>
+                                <span style="color:#94a3b8;"> | User: ${username}</span>
+                            </div>
+                            <div>
+                                <span style="color:#34d399;font-weight:900;">${status}</span>
+                                <span style="color:#94a3b8;"> | ${formatTime(machine.latestScreenUpdatedAt)}</span>
+                                <button class="aws-screen-btn aws-screen-btn-danger aws-stop-screen-btn" data-username="${safe(username)}">
+                                    TẮT MÀN HÌNH
+                                </button>
+                            </div>
+                        </div>
+                        <div class="aws-main-screen-image">
+                            <img src="${screenImageUrl(username)}" alt="${name}">
+                        </div>
+                    </div>
+                `;
+            }).join("")
+            : `<div style="padding:30px;text-align:center;color:#94a3b8;">Chưa có máy nào gửi ảnh màn hình lên AWS</div>`;
+
+        const noScreenHtml = noScreens.length
+            ? `
+                <div style="margin-top:10px;color:#94a3b8;font-size:13px;">Máy chưa có ảnh hoặc đã tắt:</div>
+                <div class="aws-small-machine-grid">
+                    ${noScreens.map(machine => {
+                        const username = machine.username || "";
+                        const disabled = machine.screenEnabled === false || machine.screenEnabled === "false";
+
+                        return `
+                            <div class="aws-small-machine-card">
+                                <b style="color:#22d3ee;">${machine.machineName || String(username).toUpperCase()}</b><br>
+                                👤 ${username || "-"}<br>
+                                📌 ${disabled ? "ĐÃ TẮT" : String(machine.status || "idle").toUpperCase()}<br>
+                                ⏱ ${formatTime(machine.latestScreenUpdatedAt)}<br>
+                                ${
+                                    disabled
+                                        ? `<button class="aws-screen-btn aws-screen-btn-enable aws-enable-screen-btn" data-username="${safe(username)}">BẬT LẠI</button>`
+                                        : ""
+                                }
+                            </div>
+                        `;
+                    }).join("")}
+                </div>
+            `
+            : "";
+
+        panel.innerHTML = `
+            <div class="aws-screen-topbar">
+                <div>
+                    <h2>🖥 AWS SCREEN MONITORING</h2>
+                    <div style="font-size:13px;color:#34d399;margin-top:6px;">
+                        Đang hiển thị ${hasScreens.length} màn hình từ AWS
+                    </div>
+                </div>
+                <button id="aws-screen-refresh-btn" class="aws-screen-btn" type="button">CẬP NHẬT MÀN HÌNH AWS</button>
+            </div>
+            ${mainHtml}
+            ${noScreenHtml}
+        `;
+
+        document.getElementById("aws-screen-refresh-btn").addEventListener("click", loadScreens);
+    }
+
+    async function loadScreens() {
+        if (loadingScreen) return;
+
+        loadingScreen = true;
+
+        try {
+            const res = await fetch(`${CLOUD_API_URL}/api/screens`);
+            const data = await res.json();
+
+            const items = data.screens || data.machines || data.items || [];
+            renderScreens(items);
+
+            console.log("AWS screen control loaded:", items);
+        } catch (err) {
+            console.warn("AWS screen load failed:", err.message);
+        } finally {
+            loadingScreen = false;
+        }
+    }
+
+    window.cybernetLoadAwsScreens = loadScreens;
+
+    document.addEventListener("DOMContentLoaded", function () {
+        console.log("AWS screen control viewer enabled");
+        loadScreens();
+    });
+})();
+</script>
+<!-- AWS_SCREEN_ADMIN_CONTROL_END -->
 </body>
 </html>

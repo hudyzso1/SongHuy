@@ -25,6 +25,7 @@ const ORDERS_TABLE = process.env.ORDERS_TABLE || "CyberNet-Orders";
 const MACHINES_TABLE = process.env.MACHINES_TABLE || "CyberNet-Machines";
 const CHAT_MESSAGES_TABLE = process.env.CHAT_MESSAGES_TABLE || "CyberNet-ChatMessages";
 const PRODUCT_IMAGES_BUCKET = process.env.PRODUCT_IMAGES_BUCKET;
+const SCREEN_CAPTURE_BUCKET = process.env.SCREEN_CAPTURE_BUCKET || PRODUCT_IMAGES_BUCKET;
 
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || "*";
 
@@ -565,6 +566,275 @@ async function createChatMessage(body) {
         message: item
     };
 }
+
+function parseImageDataUrl(imageData) {
+    const raw = String(imageData || "");
+
+    const match = raw.match(/^data:(.+?);base64,(.+)$/);
+
+    if (match) {
+        return {
+            contentType: match[1],
+            buffer: Buffer.from(match[2], "base64")
+        };
+    }
+
+    return {
+        contentType: "image/jpeg",
+        buffer: Buffer.from(raw, "base64")
+    };
+}
+
+async function uploadClientScreen(body) {
+    if (!SCREEN_CAPTURE_BUCKET) {
+        throw new Error("SCREEN_CAPTURE_BUCKET is not configured");
+    }
+
+    const username = normalizeUsername(
+        body.username ||
+        body.machineName ||
+        body.machine ||
+        body.user
+    );
+
+    const machineName = String(
+        body.machineName ||
+        body.machine ||
+        username.toUpperCase()
+    ).toUpperCase();
+
+    const imageData =
+        body.imageData ||
+        body.image ||
+        body.screenshot ||
+        body.screen ||
+        body.frame ||
+        body.dataUrl;
+
+    if (!username || !imageData) {
+        return {
+            success: false,
+            message: "Thiếu username/machineName hoặc imageData"
+        };
+    }
+
+    const parsed = parseImageDataUrl(imageData);
+
+    if (!parsed.buffer || parsed.buffer.length <= 0) {
+        return {
+            success: false,
+            message: "Dữ liệu ảnh không hợp lệ"
+        };
+    }
+
+    const contentType = parsed.contentType || "image/jpeg";
+    const ext = contentType.includes("png") ? "png" : "jpg";
+
+    const screenKey = `screens/${username}/latest.${ext}`;
+    const updatedAt = nowIso();
+
+    await s3.send(
+        new PutObjectCommand({
+            Bucket: SCREEN_CAPTURE_BUCKET,
+            Key: screenKey,
+            Body: parsed.buffer,
+            ContentType: contentType,
+            CacheControl: "no-store"
+        })
+    );
+
+    await ddb.send(
+        new UpdateCommand({
+            TableName: MACHINES_TABLE,
+            Key: { username },
+            UpdateExpression: "SET machineName = :machineName, latestScreenKey = :screenKey, latestScreenUpdatedAt = :updatedAt, latestScreenContentType = :contentType, lastSeenAt = :updatedAt, #status = :status, updatedAt = :updatedAt",
+            ExpressionAttributeNames: {
+                "#status": "status"
+            },
+            ExpressionAttributeValues: {
+                ":machineName": machineName,
+                ":screenKey": screenKey,
+                ":updatedAt": updatedAt,
+                ":contentType": contentType,
+                ":status": "playing"
+            },
+            ReturnValues: "ALL_NEW"
+        })
+    );
+
+    return {
+        success: true,
+        username,
+        machineName,
+        screenKey,
+        updatedAt
+    };
+}
+
+async function signScreenUrl(machine) {
+    if (!machine || !machine.latestScreenKey || !SCREEN_CAPTURE_BUCKET) {
+        return {
+            ...removePassword(machine),
+            screenUrl: null
+        };
+    }
+
+    const command = new GetObjectCommand({
+        Bucket: SCREEN_CAPTURE_BUCKET,
+        Key: machine.latestScreenKey
+    });
+
+    const screenUrl = await getSignedUrl(s3, command, {
+        expiresIn: 60
+    });
+
+    return {
+        ...removePassword(machine),
+        screenUrl
+    };
+}
+
+async function listScreenMachines() {
+    await ensureMachinesSeeded();
+
+    const result = await ddb.send(
+        new ScanCommand({
+            TableName: MACHINES_TABLE
+        })
+    );
+
+    const machines = result.Items || [];
+    const signed = await Promise.all(machines.map(signScreenUrl));
+
+    signed.sort((a, b) => {
+        return String(a.machineName || a.username).localeCompare(String(b.machineName || b.username));
+    });
+
+    return signed;
+}
+
+async function getMachineScreen(username) {
+    await ensureMachinesSeeded();
+
+    const normalizedUsername = normalizeUsername(username);
+
+    const result = await ddb.send(
+        new GetCommand({
+            TableName: MACHINES_TABLE,
+            Key: { username: normalizedUsername }
+        })
+    );
+
+    if (!result.Item) {
+        return null;
+    }
+
+    return signScreenUrl(result.Item);
+}
+
+async function getMachineScreenImage(username) {
+    await ensureMachinesSeeded();
+
+    const normalizedUsername = normalizeUsername(username);
+
+    const result = await ddb.send(
+        new GetCommand({
+            TableName: MACHINES_TABLE,
+            Key: { username: normalizedUsername }
+        })
+    );
+
+    const machine = result.Item;
+
+    if (!machine || !machine.latestScreenKey || !SCREEN_CAPTURE_BUCKET) {
+        return null;
+    }
+
+    const object = await s3.send(
+        new GetObjectCommand({
+            Bucket: SCREEN_CAPTURE_BUCKET,
+            Key: machine.latestScreenKey
+        })
+    );
+
+    const bytes = await object.Body.transformToByteArray();
+    const buffer = Buffer.from(bytes);
+
+    return {
+        contentType:
+            object.ContentType ||
+            machine.latestScreenContentType ||
+            "image/jpeg",
+        body: buffer.toString("base64")
+    };
+}
+
+function imageResponse(statusCode, payload, contentType) {
+    return {
+        statusCode,
+        headers: {
+            "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
+            "Access-Control-Allow-Headers": "Content-Type,Authorization",
+            "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+            "Content-Type": contentType || "image/jpeg",
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"
+        },
+        isBase64Encoded: statusCode === 200,
+        body: payload || ""
+    };
+}
+
+async function stopMachineScreen(username) {
+    const normalizedUsername = normalizeUsername(username);
+    const updatedAt = nowIso();
+
+    await ddb.send(
+        new UpdateCommand({
+            TableName: MACHINES_TABLE,
+            Key: { username: normalizedUsername },
+            UpdateExpression: "SET screenEnabled = :enabled, screenStoppedAt = :updatedAt, updatedAt = :updatedAt, lastSeenAt = :updatedAt, #status = :status REMOVE latestScreenKey, latestScreenUpdatedAt, latestScreenContentType",
+            ExpressionAttributeNames: {
+                "#status": "status"
+            },
+            ExpressionAttributeValues: {
+                ":enabled": false,
+                ":updatedAt": updatedAt,
+                ":status": "idle"
+            }
+        })
+    );
+
+    return {
+        success: true,
+        username: normalizedUsername,
+        screenEnabled: false,
+        message: "Đã tắt màn hình"
+    };
+}
+
+async function enableMachineScreen(username) {
+    const normalizedUsername = normalizeUsername(username);
+    const updatedAt = nowIso();
+
+    await ddb.send(
+        new UpdateCommand({
+            TableName: MACHINES_TABLE,
+            Key: { username: normalizedUsername },
+            UpdateExpression: "SET screenEnabled = :enabled, screenEnabledAt = :updatedAt, updatedAt = :updatedAt",
+            ExpressionAttributeValues: {
+                ":enabled": true,
+                ":updatedAt": updatedAt
+            }
+        })
+    );
+
+    return {
+        success: true,
+        username: normalizedUsername,
+        screenEnabled: true,
+        message: "Đã bật lại màn hình"
+    };
+}
 exports.handler = async (event) => {
     try {
         const method =
@@ -968,6 +1238,88 @@ if (machineDetailMatch && method === "GET") {
             });
         }
 
+
+        // =========================
+        // Screen Monitoring API
+        // =========================
+        if (
+            (
+                path === "/api/client-upload-screen" ||
+                path === "/api/screens/upload" ||
+                path === "/api/screen/upload"
+            ) &&
+            method === "POST"
+        ) {
+            const result = await uploadClientScreen(body);
+
+            return json(result.success ? 201 : 400, result);
+        }
+
+        if (path === "/api/screens" && method === "GET") {
+            const screens = await listScreenMachines();
+
+            return json(200, {
+                success: true,
+                screens,
+                machines: screens,
+                items: screens
+            });
+        }
+
+
+        const screenImageMatch = path.match(/^\/api\/screens\/([^/]+)\/image$/);
+
+        if (screenImageMatch && method === "GET") {
+            const username = decodeURIComponent(screenImageMatch[1]);
+            const image = await getMachineScreenImage(username);
+
+            if (!image) {
+                return imageResponse(
+                    404,
+                    Buffer.from("Screen image not found").toString("base64"),
+                    "text/plain"
+                );
+            }
+
+            return imageResponse(200, image.body, image.contentType);
+        }
+        const screenMatch = path.match(/^\/api\/screens\/([^/]+)$/);
+
+        if (screenMatch && method === "GET") {
+            const username = decodeURIComponent(screenMatch[1]);
+            const screen = await getMachineScreen(username);
+
+            if (!screen) {
+                return json(404, {
+                    success: false,
+                    message: "Screen not found"
+                });
+            }
+
+            return json(200, {
+                success: true,
+                screen,
+                machine: screen
+            });
+        }
+
+        const screenStopMatch = path.match(/^\/api\/screens\/([^/]+)\/stop$/);
+
+        if (screenStopMatch && ["POST", "PUT", "PATCH"].includes(method)) {
+            const username = decodeURIComponent(screenStopMatch[1]);
+            const result = await stopMachineScreen(username);
+
+            return json(200, result);
+        }
+
+        const screenEnableMatch = path.match(/^\/api\/screens\/([^/]+)\/enable$/);
+
+        if (screenEnableMatch && ["POST", "PUT", "PATCH"].includes(method)) {
+            const username = decodeURIComponent(screenEnableMatch[1]);
+            const result = await enableMachineScreen(username);
+
+            return json(200, result);
+        }
         return json(404, {
             success: false,
             message: "Route not found",
