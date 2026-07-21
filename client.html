@@ -3297,3 +3297,623 @@
 })();
 </script>
 <!-- PAYOS_CART_CLEAR_FIX_END -->
+<!-- CYBERNET_WEBSOCKET_REALTIME_START -->
+<script>
+(function () {
+    const WS_URL = "wss://5z44p44tq8.execute-api.ap-southeast-1.amazonaws.com/prod";
+
+    function getRole() {
+        const path = location.pathname.toLowerCase();
+        return path.includes("admin") ? "admin" : "client";
+    }
+
+    function getUsername() {
+        return String(
+            localStorage.getItem("session_user") ||
+            sessionStorage.getItem("session_user") ||
+            localStorage.getItem("username") ||
+            sessionStorage.getItem("username") ||
+            (getRole() === "admin" ? "admin" : "may01")
+        ).trim().toLowerCase();
+    }
+
+    let ws = null;
+    let reconnectTimer = null;
+
+    function callAny(names) {
+        names.forEach(name => {
+            try {
+                if (typeof window[name] === "function") {
+                    window[name]();
+                }
+            } catch (err) {
+                console.warn("Realtime refresh failed:", name, err);
+            }
+        });
+    }
+
+    function handleRealtimeMessage(msg) {
+        console.log("CyberNet realtime:", msg);
+
+        const type = String(msg.type || "");
+
+        if (type === "ordersChanged" || type === "payosChanged") {
+            callAny([
+                "cybernetRenderPayosFoodOrdersFixed",
+                "cybernetRenderFixedOrders",
+                "renderOrders",
+                "loadOrders",
+                "loadAwsOrders"
+            ]);
+        }
+
+        if (type === "chatChanged") {
+            callAny([
+                "loadChat",
+                "loadChatMessages",
+                "renderChat",
+                "renderAwsChat",
+                "cybernetLoadChat"
+            ]);
+        }
+
+        if (type === "machinesChanged" || type === "balanceChanged") {
+            callAny([
+                "loadMachines",
+                "renderMachines",
+                "loadAwsMachines",
+                "renderMachineStatus",
+                "loadCurrentMachine",
+                "renderUserBalance"
+            ]);
+        }
+
+        if (type === "productsChanged") {
+            callAny([
+                "loadProducts",
+                "renderProducts",
+                "loadAwsProducts",
+                "renderAwsProducts",
+                "loadFinalAwsProducts"
+            ]);
+        }
+
+        if (type === "screenChanged") {
+            callAny([
+                "cybernetRenderScreenMonitor"
+            ]);
+        }
+    }
+
+    function connectRealtime() {
+        if (!WS_URL || WS_URL === "None") {
+            console.warn("CyberNet WebSocket URL missing");
+            return;
+        }
+
+        try {
+            ws = new WebSocket(
+                WS_URL +
+                "?role=" + encodeURIComponent(getRole()) +
+                "&username=" + encodeURIComponent(getUsername())
+            );
+
+            window.cybernetRealtimeSocket = ws;
+
+            ws.onopen = function () {
+                console.log("CyberNet WebSocket connected");
+                ws.send(JSON.stringify({
+                    action: "ping",
+                    role: getRole(),
+                    username: getUsername()
+                }));
+            };
+
+            ws.onmessage = function (event) {
+                try {
+                    handleRealtimeMessage(JSON.parse(event.data));
+                } catch {
+                    console.log("CyberNet WebSocket message:", event.data);
+                }
+            };
+
+            ws.onclose = function () {
+                console.warn("CyberNet WebSocket closed, reconnecting...");
+                clearTimeout(reconnectTimer);
+                reconnectTimer = setTimeout(connectRealtime, 3000);
+            };
+
+            ws.onerror = function (err) {
+                console.warn("CyberNet WebSocket error:", err);
+            };
+        } catch (err) {
+            console.warn("CyberNet WebSocket connect failed:", err);
+        }
+    }
+
+    function broadcastRealtime(type, payload) {
+        try {
+            if (!ws || ws.readyState !== WebSocket.OPEN) return false;
+
+            ws.send(JSON.stringify({
+                action: "broadcast",
+                type,
+                from: getUsername(),
+                role: getRole(),
+                payload: payload || {}
+            }));
+
+            return true;
+        } catch (err) {
+            console.warn("CyberNet broadcast failed:", err);
+            return false;
+        }
+    }
+
+    window.cybernetWsBroadcast = broadcastRealtime;
+
+    const originalFetch = window.fetch;
+
+    window.fetch = async function () {
+        const args = arguments;
+        const url = String(args[0] || "");
+        const options = args[1] || {};
+        const method = String(options.method || "GET").toUpperCase();
+
+        const response = await originalFetch.apply(this, args);
+
+        try {
+            if (response.ok && method !== "GET") {
+                if (url.includes("/api/orders") || url.includes("/api/payos")) {
+                    broadcastRealtime("ordersChanged", { url, method });
+                }
+
+                if (url.includes("/api/chat")) {
+                    broadcastRealtime("chatChanged", { url, method });
+                }
+
+                if (url.includes("/api/machines")) {
+                    broadcastRealtime("machinesChanged", { url, method });
+                }
+
+                if (url.includes("/api/products")) {
+                    broadcastRealtime("productsChanged", { url, method });
+                }
+
+                if (url.includes("/api/screens")) {
+                    broadcastRealtime("screenChanged", { url, method });
+                }
+            }
+        } catch (err) {
+            console.warn("CyberNet realtime fetch hook failed:", err);
+        }
+
+        return response;
+    };
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", connectRealtime);
+    } else {
+        connectRealtime();
+    }
+
+    console.log("CyberNet WebSocket realtime enabled");
+})();
+</script>
+<!-- CYBERNET_WEBSOCKET_REALTIME_END -->
+<!-- CLIENT_RENTAL_TIMER_START -->
+<style>
+#cybernet-rental-timer-box {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 130px;
+    padding: 8px 12px;
+    border-radius: 12px;
+    background: rgba(2, 6, 23, .95);
+    border: 1px solid rgba(34, 211, 238, .35);
+    color: #e5e7eb;
+}
+
+#cybernet-rental-timer-label {
+    font-size: 10px;
+    color: #94a3b8;
+    font-weight: 900;
+}
+
+#cybernet-rental-timer-value {
+    font-size: 22px;
+    color: #22d3ee;
+    font-weight: 900;
+    line-height: 1.1;
+}
+
+#cybernet-rental-money-left {
+    font-size: 11px;
+    color: #a7f3d0;
+    margin-top: 3px;
+    font-weight: 800;
+}
+</style>
+
+<script>
+(function () {
+    const CLOUD_API_URL =
+        window.CYBERNET_CONFIG?.CLOUD_API_URL ||
+        "https://kdp4o8qcb1.execute-api.ap-southeast-1.amazonaws.com";
+
+    const UI_TICK_MS = 1000;
+    const SERVER_SYNC_MS = 5000;
+
+    let uiTimer = null;
+    let serverTimer = null;
+    let alreadyLoggedOut = false;
+
+    let baseRemainingSeconds = 0;
+    let baseBalance = 0;
+    let hourlyRate = 15000;
+    let lastServerSyncAt = Date.now();
+
+    function getUsername() {
+        return String(
+            localStorage.getItem("session_user") ||
+            sessionStorage.getItem("session_user") ||
+            localStorage.getItem("username") ||
+            sessionStorage.getItem("username") ||
+            "may01"
+        ).trim().toLowerCase();
+    }
+
+    function money(value) {
+        return Number(value || 0).toLocaleString("vi-VN") + "đ";
+    }
+
+    function formatSeconds(totalSeconds) {
+        const s = Math.max(0, Math.floor(Number(totalSeconds || 0)));
+        const h = Math.floor(s / 3600);
+        const m = Math.floor((s % 3600) / 60);
+        const sec = s % 60;
+
+        return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+    }
+
+    function currentRemainingSeconds() {
+        const elapsed = Math.floor((Date.now() - lastServerSyncAt) / 1000);
+        return Math.max(0, baseRemainingSeconds - elapsed);
+    }
+
+    function estimateBalanceBySeconds(seconds) {
+        return Math.max(0, Math.ceil((Number(seconds || 0) * Number(hourlyRate || 15000)) / 3600));
+    }
+
+    function ensureRentalTimerBox() {
+        let box = document.getElementById("cybernet-rental-timer-box");
+
+        if (box) return box;
+
+        box = document.createElement("div");
+        box.id = "cybernet-rental-timer-box";
+        box.innerHTML = `
+            <div id="cybernet-rental-timer-label">THỜI GIAN CÒN LẠI</div>
+            <div id="cybernet-rental-timer-value">--:--:--</div>
+            <div id="cybernet-rental-money-left">Ví: --</div>
+        `;
+
+        const oldTimePanel = Array.from(document.querySelectorAll("div")).find(el =>
+            String(el.innerText || "").toUpperCase().includes("THỜI GIAN CÒN LẠI")
+        );
+
+        if (oldTimePanel) {
+            const root = oldTimePanel.closest("div");
+            if (root) {
+                root.replaceWith(box);
+                return box;
+            }
+        }
+
+        const logoutBtn = Array.from(document.querySelectorAll("button, a")).find(el =>
+            String(el.innerText || "").toUpperCase().includes("ĐĂNG XUẤT")
+        );
+
+        if (logoutBtn && logoutBtn.parentElement) {
+            logoutBtn.parentElement.insertBefore(box, logoutBtn);
+        } else {
+            document.body.prepend(box);
+        }
+
+        return box;
+    }
+
+    function renderLocalTimer() {
+        ensureRentalTimerBox();
+
+        const remain = currentRemainingSeconds();
+        const estimatedBalance = estimateBalanceBySeconds(remain);
+
+        const value = document.getElementById("cybernet-rental-timer-value");
+        const moneyLeft = document.getElementById("cybernet-rental-money-left");
+
+        if (value) {
+            value.innerText = formatSeconds(remain);
+
+            if (remain <= 300) {
+                value.style.color = "#f87171";
+            } else {
+                value.style.color = "#22d3ee";
+            }
+        }
+
+        if (moneyLeft) {
+            moneyLeft.innerText = `Ví: ${money(estimatedBalance)} | ${money(hourlyRate)}/giờ`;
+        }
+
+        if (remain <= 0) {
+            confirmExpiredAndLogout();
+        }
+    }
+
+    function forceRentalLogout() {
+        if (alreadyLoggedOut) return;
+
+        alreadyLoggedOut = true;
+
+        try {
+            localStorage.removeItem("session_user");
+            localStorage.removeItem("username");
+            sessionStorage.removeItem("session_user");
+            sessionStorage.removeItem("username");
+        } catch {}
+
+        alert("Tài khoản đã hết tiền/thời gian sử dụng. Hệ thống sẽ đăng xuất khỏi máy thuê.");
+
+        location.href = "index.html?expired=1";
+    }
+
+    async function confirmExpiredAndLogout() {
+        if (alreadyLoggedOut) return;
+
+        const username = getUsername();
+
+        try {
+            const res = await fetch(`${CLOUD_API_URL}/api/machines/${encodeURIComponent(username)}/rental-timer?t=${Date.now()}`);
+            const data = await res.json().catch(() => ({}));
+
+            if (data.success) {
+                applyServerTimerData(data);
+
+                if (data.expired || Number(data.remainingSeconds || 0) <= 0 || Number(data.balance || 0) <= 0) {
+                    forceRentalLogout();
+                }
+
+                return;
+            }
+        } catch {}
+
+        forceRentalLogout();
+    }
+
+    function applyServerTimerData(data) {
+        baseRemainingSeconds = Math.max(0, Number(data.remainingSeconds || 0));
+        baseBalance = Math.max(0, Number(data.balance || 0));
+        hourlyRate = Number(data.hourlyRate || 15000);
+        lastServerSyncAt = Date.now();
+
+        renderLocalTimer();
+    }
+
+    async function startRentalTimerOnServer() {
+        const username = getUsername();
+
+        try {
+            await fetch(`${CLOUD_API_URL}/api/machines/${encodeURIComponent(username)}/start-rental`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: "{}"
+            });
+        } catch (err) {
+            console.warn("Start rental failed:", err);
+        }
+    }
+
+    async function syncRentalTimerFromServer() {
+        if (alreadyLoggedOut) return;
+
+        const username = getUsername();
+
+        try {
+            const res = await fetch(`${CLOUD_API_URL}/api/machines/${encodeURIComponent(username)}/rental-timer?t=${Date.now()}`);
+            const data = await res.json().catch(() => ({}));
+
+            if (!res.ok || !data.success) {
+                console.warn("Rental timer sync failed:", data);
+                return;
+            }
+
+            applyServerTimerData(data);
+
+            if (data.expired || Number(data.remainingSeconds || 0) <= 0 || Number(data.balance || 0) <= 0) {
+                forceRentalLogout();
+                return;
+            }
+
+            if (typeof window.cybernetWsBroadcast === "function") {
+                window.cybernetWsBroadcast("machinesChanged", {
+                    username,
+                    balance: data.balance,
+                    remainingSeconds: data.remainingSeconds
+                });
+            }
+        } catch (err) {
+            console.warn("Rental timer sync error:", err);
+        }
+    }
+
+    async function bootRentalTimer() {
+        ensureRentalTimerBox();
+
+        await startRentalTimerOnServer();
+        await syncRentalTimerFromServer();
+
+        clearInterval(uiTimer);
+        clearInterval(serverTimer);
+
+        uiTimer = setInterval(renderLocalTimer, UI_TICK_MS);
+        serverTimer = setInterval(syncRentalTimerFromServer, SERVER_SYNC_MS);
+
+        renderLocalTimer();
+    }
+
+    window.cybernetSyncRentalTimer = syncRentalTimerFromServer;
+    window.cybernetRenderRentalTimer = renderLocalTimer;
+    window.cybernetStartRentalTimer = bootRentalTimer;
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", bootRentalTimer);
+    } else {
+        bootRentalTimer();
+    }
+
+    window.addEventListener("beforeunload", function () {
+        try {
+            const username = getUsername();
+            navigator.sendBeacon(
+                `${CLOUD_API_URL}/api/machines/${encodeURIComponent(username)}/stop-rental`,
+                "{}"
+            );
+        } catch {}
+    });
+
+    console.log("CyberNet smooth rental timer enabled");
+})();
+</script>
+<!-- CLIENT_RENTAL_TIMER_END -->
+<!-- CLIENT_LOGOUT_RESTORE_START -->
+<style>
+#cybernet-client-logout-restore {
+    position: fixed !important;
+    top: 22px !important;
+    right: 24px !important;
+    z-index: 2147483647 !important;
+    border: 0 !important;
+    border-radius: 10px !important;
+    padding: 10px 16px !important;
+    background: #1f2937 !important;
+    color: #ffffff !important;
+    font-weight: 900 !important;
+    font-size: 13px !important;
+    cursor: pointer !important;
+    box-shadow: 0 0 16px rgba(34, 211, 238, .25) !important;
+}
+
+#cybernet-client-logout-restore:hover {
+    background: #334155 !important;
+}
+
+#cybernet-client-user-restore {
+    position: fixed !important;
+    top: 22px !important;
+    left: 24px !important;
+    z-index: 2147483647 !important;
+    padding: 10px 14px !important;
+    border-radius: 12px !important;
+    border: 1px solid rgba(34, 211, 238, .35) !important;
+    background: rgba(15, 23, 42, .95) !important;
+    color: #94a3b8 !important;
+    font-size: 12px !important;
+    font-weight: 800 !important;
+}
+
+#cybernet-client-user-restore b {
+    display: block !important;
+    color: #22d3ee !important;
+    font-size: 15px !important;
+    margin-top: 3px !important;
+}
+</style>
+
+<script>
+(function () {
+    const CLOUD_API_URL =
+        window.CYBERNET_CONFIG?.CLOUD_API_URL ||
+        "https://kdp4o8qcb1.execute-api.ap-southeast-1.amazonaws.com";
+
+    function getUsername() {
+        return String(
+            localStorage.getItem("session_user") ||
+            sessionStorage.getItem("session_user") ||
+            localStorage.getItem("username") ||
+            sessionStorage.getItem("username") ||
+            "may01"
+        ).trim().toLowerCase();
+    }
+
+    function restoreClientUserInfo() {
+        if (document.getElementById("cybernet-client-user-restore")) return;
+
+        const box = document.createElement("div");
+        box.id = "cybernet-client-user-restore";
+        box.innerHTML = `
+            HỘI VIÊN ĐANG CHƠI:
+            <b>${getUsername().toUpperCase()}</b>
+        `;
+
+        document.body.appendChild(box);
+    }
+
+    function logoutClient() {
+        const username = getUsername();
+
+        try {
+            navigator.sendBeacon(
+                `${CLOUD_API_URL}/api/machines/${encodeURIComponent(username)}/stop-rental`,
+                "{}"
+            );
+        } catch {}
+
+        try {
+            localStorage.removeItem("session_user");
+            localStorage.removeItem("username");
+            localStorage.removeItem("payos_pending_order_code");
+            localStorage.removeItem("payos_pending_food_order_code");
+
+            sessionStorage.removeItem("session_user");
+            sessionStorage.removeItem("username");
+        } catch {}
+
+        location.href = "index.html?logout=1";
+    }
+
+    function restoreLogoutButton() {
+        if (document.getElementById("cybernet-client-logout-restore")) return;
+
+        const btn = document.createElement("button");
+        btn.id = "cybernet-client-logout-restore";
+        btn.type = "button";
+        btn.innerText = "Đăng xuất";
+        btn.onclick = logoutClient;
+
+        document.body.appendChild(btn);
+    }
+
+    window.cybernetLogoutClient = logoutClient;
+    window.cybernetRestoreLogoutButton = function () {
+        restoreClientUserInfo();
+        restoreLogoutButton();
+    };
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", window.cybernetRestoreLogoutButton);
+    } else {
+        window.cybernetRestoreLogoutButton();
+    }
+
+    setTimeout(window.cybernetRestoreLogoutButton, 500);
+    setTimeout(window.cybernetRestoreLogoutButton, 1500);
+
+    console.log("CyberNet client logout restored");
+})();
+</script>
+<!-- CLIENT_LOGOUT_RESTORE_END -->

@@ -1,57 +1,27 @@
-﻿# Dependencies
+﻿# dependencies
 node_modules/
 aws-backend/src/node_modules/
-
-# AWS SAM
-.aws-sam/
 aws-backend/.aws-sam/
-aws-backend/samconfig.toml
+.aws-sam/
 
-# Secrets
+# secret env files
+lambda-env.json
+aws-backend/lambda-env.json
+*.env
 .env
-.env.*
-!.env.example
-*.csv
-*.pem
-*.key
-*.p12
-*.pfx
 
-# Runtime uploads
-uploads/
-
-# Logs
-*.log
-npm-debug.log*
-
-# Editor
-.vscode/
-.idea/
-
-# Windows
-Thumbs.db
-Desktop.ini
-
-# Backup files
-*.backup.js
-*_backup.html
-.gitignore-folder-backup/
-
-# CyberNet temporary backup files
+# backup/temp files
+_backup_old/
 *.before-*.html
+*.before-*.js
 *.backup.html
 *.backup.*.html
 *.bad-ui.backup.html
 *.broken-now.html
 *.current-broken.html
-*.before-*.js
 before-ui-recovery.patch
-_backup_old/
 
-# secret env files
-aws-backend/lambda-env.json
-lambda-env.json
-
-# secret env files
-aws-backend/lambda-env.json
-lambda-env.json
+# system/editor
+.DS_Store
+Thumbs.db
+.vscode/

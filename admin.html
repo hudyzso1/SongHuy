@@ -4144,3 +4144,322 @@
 })();
 </script>
 <!-- ADMIN_PAYOS_FOOD_MONEY_FIX_END -->
+<!-- CYBERNET_WEBSOCKET_REALTIME_START -->
+<script>
+(function () {
+    const WS_URL = "wss://5z44p44tq8.execute-api.ap-southeast-1.amazonaws.com/prod";
+
+    function getRole() {
+        const path = location.pathname.toLowerCase();
+        return path.includes("admin") ? "admin" : "client";
+    }
+
+    function getUsername() {
+        return String(
+            localStorage.getItem("session_user") ||
+            sessionStorage.getItem("session_user") ||
+            localStorage.getItem("username") ||
+            sessionStorage.getItem("username") ||
+            (getRole() === "admin" ? "admin" : "may01")
+        ).trim().toLowerCase();
+    }
+
+    let ws = null;
+    let reconnectTimer = null;
+
+    function callAny(names) {
+        names.forEach(name => {
+            try {
+                if (typeof window[name] === "function") {
+                    window[name]();
+                }
+            } catch (err) {
+                console.warn("Realtime refresh failed:", name, err);
+            }
+        });
+    }
+
+    function handleRealtimeMessage(msg) {
+        console.log("CyberNet realtime:", msg);
+
+        const type = String(msg.type || "");
+
+        if (type === "ordersChanged" || type === "payosChanged") {
+            callAny([
+                "cybernetRenderPayosFoodOrdersFixed",
+                "cybernetRenderFixedOrders",
+                "renderOrders",
+                "loadOrders",
+                "loadAwsOrders"
+            ]);
+        }
+
+        if (type === "chatChanged") {
+            callAny([
+                "loadChat",
+                "loadChatMessages",
+                "renderChat",
+                "renderAwsChat",
+                "cybernetLoadChat"
+            ]);
+        }
+
+        if (type === "machinesChanged" || type === "balanceChanged") {
+            callAny([
+                "loadMachines",
+                "renderMachines",
+                "loadAwsMachines",
+                "renderMachineStatus",
+                "loadCurrentMachine",
+                "renderUserBalance"
+            ]);
+        }
+
+        if (type === "productsChanged") {
+            callAny([
+                "loadProducts",
+                "renderProducts",
+                "loadAwsProducts",
+                "renderAwsProducts",
+                "loadFinalAwsProducts"
+            ]);
+        }
+
+        if (type === "screenChanged") {
+            callAny([
+                "cybernetRenderScreenMonitor"
+            ]);
+        }
+    }
+
+    function connectRealtime() {
+        if (!WS_URL || WS_URL === "None") {
+            console.warn("CyberNet WebSocket URL missing");
+            return;
+        }
+
+        try {
+            ws = new WebSocket(
+                WS_URL +
+                "?role=" + encodeURIComponent(getRole()) +
+                "&username=" + encodeURIComponent(getUsername())
+            );
+
+            window.cybernetRealtimeSocket = ws;
+
+            ws.onopen = function () {
+                console.log("CyberNet WebSocket connected");
+                ws.send(JSON.stringify({
+                    action: "ping",
+                    role: getRole(),
+                    username: getUsername()
+                }));
+            };
+
+            ws.onmessage = function (event) {
+                try {
+                    handleRealtimeMessage(JSON.parse(event.data));
+                } catch {
+                    console.log("CyberNet WebSocket message:", event.data);
+                }
+            };
+
+            ws.onclose = function () {
+                console.warn("CyberNet WebSocket closed, reconnecting...");
+                clearTimeout(reconnectTimer);
+                reconnectTimer = setTimeout(connectRealtime, 3000);
+            };
+
+            ws.onerror = function (err) {
+                console.warn("CyberNet WebSocket error:", err);
+            };
+        } catch (err) {
+            console.warn("CyberNet WebSocket connect failed:", err);
+        }
+    }
+
+    function broadcastRealtime(type, payload) {
+        try {
+            if (!ws || ws.readyState !== WebSocket.OPEN) return false;
+
+            ws.send(JSON.stringify({
+                action: "broadcast",
+                type,
+                from: getUsername(),
+                role: getRole(),
+                payload: payload || {}
+            }));
+
+            return true;
+        } catch (err) {
+            console.warn("CyberNet broadcast failed:", err);
+            return false;
+        }
+    }
+
+    window.cybernetWsBroadcast = broadcastRealtime;
+
+    const originalFetch = window.fetch;
+
+    window.fetch = async function () {
+        const args = arguments;
+        const url = String(args[0] || "");
+        const options = args[1] || {};
+        const method = String(options.method || "GET").toUpperCase();
+
+        const response = await originalFetch.apply(this, args);
+
+        try {
+            if (response.ok && method !== "GET") {
+                if (url.includes("/api/orders") || url.includes("/api/payos")) {
+                    broadcastRealtime("ordersChanged", { url, method });
+                }
+
+                if (url.includes("/api/chat")) {
+                    broadcastRealtime("chatChanged", { url, method });
+                }
+
+                if (url.includes("/api/machines")) {
+                    broadcastRealtime("machinesChanged", { url, method });
+                }
+
+                if (url.includes("/api/products")) {
+                    broadcastRealtime("productsChanged", { url, method });
+                }
+
+                if (url.includes("/api/screens")) {
+                    broadcastRealtime("screenChanged", { url, method });
+                }
+            }
+        } catch (err) {
+            console.warn("CyberNet realtime fetch hook failed:", err);
+        }
+
+        return response;
+    };
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", connectRealtime);
+    } else {
+        connectRealtime();
+    }
+
+    console.log("CyberNet WebSocket realtime enabled");
+})();
+</script>
+<!-- CYBERNET_WEBSOCKET_REALTIME_END -->
+',
+    ''
+)
+
+$block = @'
+<!-- ADMIN_HIDE_OLD_PANELS_START -->
+<script>
+(function () {
+    function normalizeText(text) {
+        return String(text || "")
+            .replace(/\s+/g, " ")
+            .trim()
+            .toUpperCase();
+    }
+
+    function shouldHidePanel(text) {
+        const t = normalizeText(text);
+
+        // Ẩn khung camera/giám sát cũ
+        if (
+            t.includes("ĐANG GIÁM SÁT MÁY") ||
+            t.includes("DANG GIAM SAT MAY") ||
+            t.includes("VUI LÒNG CHỌN MỘT MÁY ĐỂ KẾT NỐI CAMERA") ||
+            t.includes("VUI LONG CHON MOT MAY DE KET NOI CAMERA")
+        ) {
+            return true;
+        }
+
+        // Ẩn khung đơn hàng cũ, không ẩn panel PayOS mới
+        if (
+            (
+                t.includes("ĐƠN HÀNG CHỜ XÁC NHẬN") ||
+                t.includes("DON HANG CHO XAC NHAN") ||
+                t.includes("ĐƠN HÀNG AWS CHỜ XÁC NHẬN") ||
+                t.includes("DON HANG AWS CHO XAC NHAN")
+            ) &&
+            !t.includes("ĐƠN MÓN PAYOS") &&
+            !t.includes("DON MON PAYOS") &&
+            !t.includes("HIỂN THỊ ĐÚNG TIỀN") &&
+            !t.includes("HIEN THI DUNG TIEN")
+        ) {
+            return true;
+        }
+
+        return false;
+    }
+
+    function findPanelRoot(el) {
+        let current = el;
+
+        for (let i = 0; i < 8 && current && current !== document.body; i++) {
+            const text = normalizeText(current.innerText);
+
+            if (!text) {
+                current = current.parentElement;
+                continue;
+            }
+
+            const style = window.getComputedStyle(current);
+            const hasPanelLook =
+                style.borderStyle !== "none" ||
+                Number(String(style.borderRadius || "0").replace("px", "")) > 0 ||
+                current.className.toString().toLowerCase().includes("panel") ||
+                current.className.toString().toLowerCase().includes("card") ||
+                current.className.toString().toLowerCase().includes("order") ||
+                current.className.toString().toLowerCase().includes("monitor");
+
+            if (hasPanelLook && shouldHidePanel(text)) {
+                return current;
+            }
+
+            current = current.parentElement;
+        }
+
+        return el;
+    }
+
+    function hideOldAdminPanels() {
+        const all = Array.from(document.querySelectorAll("div, section, article, main, aside"));
+
+        all.forEach(el => {
+            const text = normalizeText(el.innerText);
+
+            if (!shouldHidePanel(text)) return;
+
+            const root = findPanelRoot(el);
+
+            if (root && root !== document.body && root !== document.documentElement) {
+                root.style.display = "none";
+                root.setAttribute("data-cybernet-hidden-old-panel", "true");
+            }
+        });
+    }
+
+    window.cybernetHideOldAdminPanels = hideOldAdminPanels;
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", hideOldAdminPanels);
+    } else {
+        hideOldAdminPanels();
+    }
+
+    const observer = new MutationObserver(function () {
+        hideOldAdminPanels();
+    });
+
+    observer.observe(document.documentElement, {
+        childList: true,
+        subtree: true
+    });
+
+    console.log("CyberNet old admin panels hidden");
+})();
+</script>
+<!-- ADMIN_HIDE_OLD_PANELS_END -->

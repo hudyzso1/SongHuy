@@ -357,101 +357,6 @@ Resources:
               Bool:
                 aws:SecureTransport: "false"
 
-
-  CyberNetWsConnectionsTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: CyberNet-WsConnections
-      BillingMode: PAY_PER_REQUEST
-      AttributeDefinitions:
-        - AttributeName: connectionId
-          AttributeType: S
-      KeySchema:
-        - AttributeName: connectionId
-          KeyType: HASH
-      TimeToLiveSpecification:
-        AttributeName: ttl
-        Enabled: true
-
-  CyberNetWebSocketApi:
-    Type: AWS::ApiGatewayV2::Api
-    Properties:
-      Name: CyberNet-WebSocket
-      ProtocolType: WEBSOCKET
-      RouteSelectionExpression: "$request.body.action"
-
-  CyberNetWebSocketStage:
-    Type: AWS::ApiGatewayV2::Stage
-    Properties:
-      ApiId: !Ref CyberNetWebSocketApi
-      StageName: prod
-      AutoDeploy: true
-
-  CyberNetWebSocketFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: cybernet-websocket
-      CodeUri: src/
-      Handler: ws.handler
-      Runtime: nodejs22.x
-      MemorySize: 256
-      Timeout: 10
-      Environment:
-        Variables:
-          CONNECTIONS_TABLE: !Ref CyberNetWsConnectionsTable
-      Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref CyberNetWsConnectionsTable
-        - Statement:
-            - Effect: Allow
-              Action:
-                - execute-api:ManageConnections
-              Resource:
-                - !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${CyberNetWebSocketApi}/*
-
-  CyberNetWebSocketIntegration:
-    Type: AWS::ApiGatewayV2::Integration
-    Properties:
-      ApiId: !Ref CyberNetWebSocketApi
-      IntegrationType: AWS_PROXY
-      IntegrationUri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CyberNetWebSocketFunction.Arn}/invocations
-
-  CyberNetWebSocketConnectRoute:
-    Type: AWS::ApiGatewayV2::Route
-    Properties:
-      ApiId: !Ref CyberNetWebSocketApi
-      RouteKey: $connect
-      Target: !Sub integrations/${CyberNetWebSocketIntegration}
-
-  CyberNetWebSocketDisconnectRoute:
-    Type: AWS::ApiGatewayV2::Route
-    Properties:
-      ApiId: !Ref CyberNetWebSocketApi
-      RouteKey: $disconnect
-      Target: !Sub integrations/${CyberNetWebSocketIntegration}
-
-  CyberNetWebSocketDefaultRoute:
-    Type: AWS::ApiGatewayV2::Route
-    Properties:
-      ApiId: !Ref CyberNetWebSocketApi
-      RouteKey: $default
-      Target: !Sub integrations/${CyberNetWebSocketIntegration}
-
-  CyberNetWebSocketBroadcastRoute:
-    Type: AWS::ApiGatewayV2::Route
-    Properties:
-      ApiId: !Ref CyberNetWebSocketApi
-      RouteKey: broadcast
-      Target: !Sub integrations/${CyberNetWebSocketIntegration}
-
-  CyberNetWebSocketPermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !Ref CyberNetWebSocketFunction
-      Principal: apigateway.amazonaws.com
-      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${CyberNetWebSocketApi}/*
-
 Outputs:
   ApiUrl:
     Description: Public URL for the CyberNet HTTP API
@@ -496,7 +401,3 @@ Outputs:
   FrontendUrl:
     Description: Public HTTPS URL for CyberNet frontend
     Value: !Sub "https://${FrontendDistribution.DomainName}"
-
-  CyberNetWebSocketUrl:
-    Description: CyberNet WebSocket URL
-    Value: !Sub wss://${CyberNetWebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/prod

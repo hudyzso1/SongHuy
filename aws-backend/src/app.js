@@ -30,6 +30,7 @@ const PRODUCT_IMAGES_BUCKET = process.env.PRODUCT_IMAGES_BUCKET;
 const SCREEN_CAPTURE_BUCKET = process.env.SCREEN_CAPTURE_BUCKET || PRODUCT_IMAGES_BUCKET;
 
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || "*";
+const RENTAL_HOURLY_RATE = Number(process.env.RENTAL_HOURLY_RATE || 15000);
 
 const PAYOS_CLIENT_ID = process.env.PAYOS_CLIENT_ID || "";
 const PAYOS_API_KEY = process.env.PAYOS_API_KEY || "";
@@ -1485,6 +1486,162 @@ async function handlePayosWebhookV2(body) {
         raw: body
     });
 }
+
+function toMoneyNumber(value) {
+    const n = Number(value || 0);
+    return Number.isFinite(n) ? n : 0;
+}
+
+function secondsFromBalance(balance, hourlyRate) {
+    const money = toMoneyNumber(balance);
+    const rate = Number(hourlyRate || RENTAL_HOURLY_RATE || 15000);
+
+    if (money <= 0 || rate <= 0) return 0;
+
+    return Math.floor((money * 3600) / rate);
+}
+
+function formatTimerSeconds(totalSeconds) {
+    const s = Math.max(0, Math.floor(Number(totalSeconds || 0)));
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+
+    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+}
+
+async function settleRentalTimer(username, mode = "tick") {
+    username = normalizeUsername(username);
+
+    if (!username) {
+        return {
+            success: false,
+            message: "Thiếu username"
+        };
+    }
+
+    const now = new Date();
+    const nowText = now.toISOString();
+
+    const result = await ddb.send(
+        new GetCommand({
+            TableName: MACHINES_TABLE,
+            Key: { username }
+        })
+    );
+
+    const machine = result.Item;
+
+    if (!machine) {
+        return {
+            success: false,
+            message: "Không tìm thấy máy khách",
+            username
+        };
+    }
+
+    const hourlyRate = Number(machine.hourlyRate || RENTAL_HOURLY_RATE || 15000);
+    let balance = toMoneyNumber(machine.balance);
+    let rentalActive = machine.rentalActive === true || machine.timerActive === true;
+
+    if (mode === "start" && balance > 0) {
+        rentalActive = true;
+    }
+
+    if (mode === "stop") {
+        rentalActive = false;
+    }
+
+    let elapsedSeconds = 0;
+    let chargedAmount = 0;
+
+    const lastSyncText =
+        machine.rentalLastSyncedAt ||
+        machine.timerLastSyncedAt ||
+        machine.rentalStartedAt ||
+        machine.startedAt ||
+        nowText;
+
+    if (rentalActive && lastSyncText) {
+        const last = new Date(lastSyncText);
+
+        if (!Number.isNaN(last.getTime())) {
+            elapsedSeconds = Math.max(0, Math.floor((now.getTime() - last.getTime()) / 1000));
+        }
+
+        if (elapsedSeconds > 0) {
+            chargedAmount = Math.ceil((elapsedSeconds * hourlyRate) / 3600);
+            balance = Math.max(0, balance - chargedAmount);
+        }
+    }
+
+    const remainingSeconds = secondsFromBalance(balance, hourlyRate);
+    const expired = remainingSeconds <= 0;
+
+    if (expired) {
+        rentalActive = false;
+        balance = 0;
+    }
+
+    const updateNames = {};
+
+    const updateValues = {
+        ":balance": balance,
+        ":remainingSeconds": remainingSeconds,
+        ":hourlyRate": hourlyRate,
+        ":rentalActive": rentalActive,
+        ":now": nowText,
+        ":lastChargedAmount": chargedAmount,
+        ":lastElapsedSeconds": elapsedSeconds,
+        ":expired": expired
+    };
+
+    let updateExpression =
+        "SET balance = :balance, remainingSeconds = :remainingSeconds, hourlyRate = :hourlyRate, rentalActive = :rentalActive, timerActive = :rentalActive, rentalLastSyncedAt = :now, updatedAt = :now, lastChargedAmount = :lastChargedAmount, lastElapsedSeconds = :lastElapsedSeconds, rentalExpired = :expired";
+
+    if (mode === "start" && !machine.rentalStartedAt && !expired) {
+        updateExpression += ", rentalStartedAt = :now";
+    }
+
+    if (expired) {
+        updateNames["#status"] = "status";
+        updateExpression += ", #status = :expiredStatus, expiredAt = :now";
+        updateValues[":expiredStatus"] = "expired";
+    }
+
+    if (mode === "stop") {
+        updateExpression += ", rentalStoppedAt = :now";
+    }
+
+    const updateParams = {
+        TableName: MACHINES_TABLE,
+        Key: { username },
+        UpdateExpression: updateExpression,
+        ExpressionAttributeValues: updateValues
+    };
+
+    if (Object.keys(updateNames).length > 0) {
+        updateParams.ExpressionAttributeNames = updateNames;
+    }
+
+    await ddb.send(new UpdateCommand(updateParams));
+
+    return {
+        success: true,
+        username,
+        balance,
+        hourlyRate,
+        remainingSeconds,
+        remainingText: formatTimerSeconds(remainingSeconds),
+        rentalActive,
+        expired,
+        chargedAmount,
+        elapsedSeconds,
+        message: expired
+            ? "Hết tiền, bắt buộc đăng xuất"
+            : "Timer thuê máy đã đồng bộ"
+    };
+}
 exports.handler = async (event) => {
     try {
         const method =
@@ -1778,6 +1935,29 @@ if (path === "/api/chat" && method === "POST") {
 
     return json(result.success ? 201 : 400, result);
 }
+
+        // =========================
+        // Rental Timer API
+        // 15.000đ = 1 giờ
+        // =========================
+        const rentalTimerMatch = path.match(/^\/api\/machines\/([^/]+)\/rental-timer$/);
+        const rentalStartMatch = path.match(/^\/api\/machines\/([^/]+)\/start-rental$/);
+        const rentalStopMatch = path.match(/^\/api\/machines\/([^/]+)\/stop-rental$/);
+
+        if (rentalTimerMatch && method === "GET") {
+            const result = await settleRentalTimer(decodeURIComponent(rentalTimerMatch[1]), "tick");
+            return json(result.success ? 200 : 404, result);
+        }
+
+        if (rentalStartMatch && method === "POST") {
+            const result = await settleRentalTimer(decodeURIComponent(rentalStartMatch[1]), "start");
+            return json(result.success ? 200 : 404, result);
+        }
+
+        if (rentalStopMatch && method === "POST") {
+            const result = await settleRentalTimer(decodeURIComponent(rentalStopMatch[1]), "stop");
+            return json(result.success ? 200 : 404, result);
+        }
         // =========================
         // Machines / Auth API
         // =========================
