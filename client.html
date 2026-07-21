@@ -3917,3 +3917,45 @@
 })();
 </script>
 <!-- CLIENT_LOGOUT_RESTORE_END -->
+<!-- CLIENT_HIDE_ADMIN_TOPUP_START -->
+<script>
+(function () {
+    function hideAdminTopupOnClient() {
+        document.querySelectorAll("div, section, article").forEach(el => {
+            const text = String(el.innerText || "").toUpperCase();
+
+            if (
+                text.includes("NẠP TIỀN THỦ CÔNG") ||
+                text.includes("NAP TIEN THU CONG") ||
+                text.includes("NẠP TIỀN THỦ CÔNG CHO MÁY KHÁCH") ||
+                text.includes("NAP TIEN THU CONG CHO MAY KHACH")
+            ) {
+                if (!text.includes("PAYOS")) {
+                    el.style.setProperty("display", "none", "important");
+                    el.setAttribute("data-hidden-admin-topup-on-client", "true");
+                }
+            }
+        });
+    }
+
+    window.cybernetHideAdminTopupOnClient = hideAdminTopupOnClient;
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", hideAdminTopupOnClient);
+    } else {
+        hideAdminTopupOnClient();
+    }
+
+    setTimeout(hideAdminTopupOnClient, 500);
+    setTimeout(hideAdminTopupOnClient, 1500);
+
+    const observer = new MutationObserver(hideAdminTopupOnClient);
+    observer.observe(document.documentElement, {
+        childList: true,
+        subtree: true
+    });
+
+    console.log("CyberNet client admin topup hidden");
+})();
+</script>
+<!-- CLIENT_HIDE_ADMIN_TOPUP_END -->

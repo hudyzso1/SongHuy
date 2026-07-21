@@ -4352,7 +4352,7 @@
     ''
 )
 
-$block = @'
+
 <!-- ADMIN_HIDE_OLD_PANELS_START -->
 <script>
 (function () {
@@ -4463,3 +4463,363 @@ $block = @'
 })();
 </script>
 <!-- ADMIN_HIDE_OLD_PANELS_END -->
+<!-- ADMIN_REMOVE_PUNCTUATION_GARBAGE_START -->
+<script>
+(function () {
+    function isGarbageText(text) {
+        const t = String(text || "").trim();
+
+        if (!t) return false;
+
+        return (
+            t === "'; \"\")" ||
+            t === "'; \"')" ||
+            t === "'; '')" ||
+            t === "'; })" ||
+            t === "'; )" ||
+            t === "\"')" ||
+            t === "\"\")" ||
+            /^\s*['"`;,\)\(\}\{\s]{3,30}\s*$/.test(t)
+        );
+    }
+
+    function cleanGarbageTextNodes() {
+        let removed = 0;
+
+        const walker = document.createTreeWalker(
+            document.body,
+            NodeFilter.SHOW_TEXT
+        );
+
+        const badNodes = [];
+
+        while (walker.nextNode()) {
+            const node = walker.currentNode;
+            const parent = node.parentElement;
+
+            if (!parent) continue;
+
+            const tag = parent.tagName.toLowerCase();
+
+            if (["script", "style", "textarea", "input", "button"].includes(tag)) {
+                continue;
+            }
+
+            if (isGarbageText(node.nodeValue)) {
+                badNodes.push(node);
+            }
+        }
+
+        badNodes.forEach(node => {
+            const parent = node.parentElement;
+            const parentText = String(parent?.innerText || "").trim();
+
+            if (
+                parent &&
+                parent !== document.body &&
+                isGarbageText(parentText)
+            ) {
+                parent.remove();
+            } else {
+                node.nodeValue = "";
+            }
+
+            removed++;
+        });
+
+        console.log("CyberNet removed garbage text nodes:", removed);
+        return removed;
+    }
+
+    window.cybernetCleanGarbageText = cleanGarbageTextNodes;
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", cleanGarbageTextNodes);
+    } else {
+        cleanGarbageTextNodes();
+    }
+
+    setTimeout(cleanGarbageTextNodes, 300);
+    setTimeout(cleanGarbageTextNodes, 1000);
+    setTimeout(cleanGarbageTextNodes, 2500);
+
+    const observer = new MutationObserver(cleanGarbageTextNodes);
+
+    observer.observe(document.documentElement, {
+        childList: true,
+        subtree: true
+    });
+
+    console.log("CyberNet punctuation garbage cleanup enabled");
+})();
+</script>
+<!-- ADMIN_REMOVE_PUNCTUATION_GARBAGE_END -->
+<!-- ADMIN_ONE_TOPUP_PANEL_START -->
+<style>
+#cybernet-one-topup-panel {
+    margin: 14px auto;
+    max-width: 980px;
+    padding: 14px;
+    border: 1px solid rgba(34, 211, 238, .6);
+    border-radius: 14px;
+    background: rgba(2, 6, 23, .97);
+    color: #e5e7eb;
+    box-shadow: 0 0 18px rgba(34, 211, 238, .2);
+    display: block !important;
+}
+
+#cybernet-one-topup-panel h3 {
+    margin: 0 0 12px 0;
+    color: #22d3ee;
+    font-size: 16px;
+    font-weight: 900;
+}
+
+.cybernet-one-topup-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+#cybernet-one-topup-user,
+#cybernet-one-topup-amount {
+    min-width: 180px;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(34, 211, 238, .35);
+    background: #020617;
+    color: white;
+    font-weight: 800;
+    outline: none;
+}
+
+.cybernet-one-money-btn,
+#cybernet-one-topup-btn {
+    border: 0;
+    border-radius: 10px;
+    padding: 10px 13px;
+    color: white;
+    font-weight: 900;
+    cursor: pointer;
+    background: #0891b2;
+}
+
+.cybernet-one-money-btn {
+    background: #0f172a;
+    color: #67e8f9;
+    border: 1px solid rgba(34, 211, 238, .35);
+}
+
+#cybernet-one-topup-status {
+    margin-top: 10px;
+    font-size: 13px;
+    color: #94a3b8;
+    font-weight: 800;
+}
+</style>
+
+<script>
+(function () {
+    const CLOUD_API_URL =
+        window.CYBERNET_CONFIG?.CLOUD_API_URL ||
+        "https://kdp4o8qcb1.execute-api.ap-southeast-1.amazonaws.com";
+
+    function money(v) {
+        return Number(v || 0).toLocaleString("vi-VN") + "đ";
+    }
+
+    function extractMachines(data) {
+        if (Array.isArray(data)) return data;
+        if (Array.isArray(data.machines)) return data.machines;
+        if (Array.isArray(data.items)) return data.items;
+        if (Array.isArray(data.data)) return data.data;
+        return [];
+    }
+
+    function getUsername(machine) {
+        return String(
+            machine.username ||
+            machine.machineName ||
+            machine.user ||
+            machine.id ||
+            ""
+        ).trim().toLowerCase();
+    }
+
+    async function loadTopupMachines() {
+        const select = document.getElementById("cybernet-one-topup-user");
+        if (!select) return;
+
+        try {
+            const res = await fetch(`${CLOUD_API_URL}/api/machines?t=${Date.now()}`);
+            const data = await res.json();
+
+            const machines = extractMachines(data)
+                .map(m => ({
+                    username: getUsername(m),
+                    balance: Number(m.balance || 0)
+                }))
+                .filter(m => m.username && m.username !== "admin");
+
+            if (!machines.length) return;
+
+            select.innerHTML = machines.map(m => `
+                <option value="${m.username}">
+                    ${m.username.toUpperCase()} - ${money(m.balance)}
+                </option>
+            `).join("");
+        } catch (err) {
+            console.warn("Load topup machines failed:", err);
+        }
+    }
+
+    function ensureOneTopupPanel() {
+        let panel = document.getElementById("cybernet-one-topup-panel");
+
+        if (panel) {
+            panel.style.setProperty("display", "block", "important");
+            return panel;
+        }
+
+        panel = document.createElement("div");
+        panel.id = "cybernet-one-topup-panel";
+        panel.setAttribute("data-cybernet-keep", "true");
+
+        panel.innerHTML = `
+            <h3>💵 CỘNG TIỀN MÁY KHÁCH</h3>
+
+            <div class="cybernet-one-topup-row">
+                <select id="cybernet-one-topup-user">
+                    <option value="may01">MAY01</option>
+                    <option value="may02">MAY02</option>
+                    <option value="may03">MAY03</option>
+                </select>
+
+                <input id="cybernet-one-topup-amount" type="number" min="1000" step="1000" placeholder="Số tiền cộng...">
+
+                <button type="button" class="cybernet-one-money-btn" data-one-money="10000">10k</button>
+                <button type="button" class="cybernet-one-money-btn" data-one-money="20000">20k</button>
+                <button type="button" class="cybernet-one-money-btn" data-one-money="50000">50k</button>
+
+                <button type="button" id="cybernet-one-topup-btn">CỘNG TIỀN</button>
+            </div>
+
+            <div id="cybernet-one-topup-status">
+                15.000đ = 1 giờ. Tiền cộng sẽ đồng bộ với ví và bộ đếm giờ máy khách.
+            </div>
+        `;
+
+        const machinesPanel = Array.from(document.querySelectorAll("div,section")).find(el =>
+            String(el.innerText || "").toUpperCase().includes("AWS CLOUD MACHINES")
+        );
+
+        const screenPanel = document.getElementById("cybernet-screen-monitor");
+
+        if (machinesPanel) {
+            machinesPanel.insertAdjacentElement("beforebegin", panel);
+        } else if (screenPanel) {
+            screenPanel.insertAdjacentElement("afterend", panel);
+        } else {
+            document.body.prepend(panel);
+        }
+
+        panel.querySelectorAll("[data-one-money]").forEach(btn => {
+            btn.addEventListener("click", function () {
+                document.getElementById("cybernet-one-topup-amount").value = this.dataset.oneMoney;
+            });
+        });
+
+        document.getElementById("cybernet-one-topup-btn").addEventListener("click", addMoneyToMachine);
+
+        loadTopupMachines();
+
+        return panel;
+    }
+
+    async function addMoneyToMachine() {
+        const username = String(document.getElementById("cybernet-one-topup-user")?.value || "may01").trim().toLowerCase();
+        const amount = Number(document.getElementById("cybernet-one-topup-amount")?.value || 0);
+        const status = document.getElementById("cybernet-one-topup-status");
+        const btn = document.getElementById("cybernet-one-topup-btn");
+
+        if (!username || !amount || amount < 1000) {
+            alert("Chọn máy và nhập số tiền tối thiểu 1.000đ nha fen!");
+            return;
+        }
+
+        btn.disabled = true;
+        btn.innerText = "ĐANG CỘNG...";
+        status.innerText = `Đang cộng ${money(amount)} cho ${username.toUpperCase()}...`;
+        status.style.color = "#fbbf24";
+
+        try {
+            const res = await fetch(`${CLOUD_API_URL}/api/machines/topup`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    username,
+                    amount
+                })
+            });
+
+            const data = await res.json().catch(() => ({}));
+
+            if (!res.ok || data.success === false) {
+                throw new Error(data.message || "Không cộng được tiền");
+            }
+
+            status.innerText = `Đã cộng ${money(amount)} cho ${username.toUpperCase()}.`;
+            status.style.color = "#34d399";
+
+            document.getElementById("cybernet-one-topup-amount").value = "";
+
+            await loadTopupMachines();
+
+            if (typeof window.cybernetWsBroadcast === "function") {
+                window.cybernetWsBroadcast("machinesChanged", {
+                    username,
+                    amount,
+                    source: "admin-add-money"
+                });
+            }
+
+            [
+                "loadMachines",
+                "renderMachines",
+                "loadAwsMachines",
+                "renderMachineStatus",
+                "cybernetRenderScreenMonitor"
+            ].forEach(fn => {
+                try {
+                    if (typeof window[fn] === "function") window[fn]();
+                } catch {}
+            });
+        } catch (err) {
+            status.innerText = "Lỗi cộng tiền: " + err.message;
+            status.style.color = "#f87171";
+            alert("Lỗi cộng tiền: " + err.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerText = "CỘNG TIỀN";
+        }
+    }
+
+    window.cybernetRestoreOneTopupPanel = ensureOneTopupPanel;
+    window.cybernetAddMoneyToMachine = addMoneyToMachine;
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", ensureOneTopupPanel);
+    } else {
+        ensureOneTopupPanel();
+    }
+
+    setTimeout(ensureOneTopupPanel, 500);
+    setTimeout(ensureOneTopupPanel, 1500);
+
+    console.log("CyberNet one admin topup panel restored");
+})();
+</script>
+<!-- ADMIN_ONE_TOPUP_PANEL_END -->
