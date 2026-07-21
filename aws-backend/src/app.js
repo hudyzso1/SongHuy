@@ -13,7 +13,8 @@ const {
     DynamoDBDocumentClient,
     ScanCommand,
     PutCommand,
-    DeleteCommand
+    DeleteCommand,
+    UpdateCommand
 } = require("@aws-sdk/lib-dynamodb");
 
 const {
@@ -69,6 +70,9 @@ const s3 = new S3Client({
 const PRODUCTS_TABLE =
     process.env.PRODUCTS_TABLE;
 
+const ORDERS_TABLE =
+    process.env.ORDERS_TABLE;
+
 const PRODUCT_IMAGES_BUCKET =
     process.env.PRODUCT_IMAGES_BUCKET;
 
@@ -102,7 +106,32 @@ function validateImagesConfig() {
         );
     }
 }
+function validateOrdersConfig() {
+    if (!ORDERS_TABLE) {
+        throw new Error(
+            "Missing ORDERS_TABLE environment variable"
+        );
+    }
+}
 
+const ORDER_STATUSES = new Set([
+    "pending",
+    "done",
+    "completed",
+    "cancelled"
+]);
+
+function normalizeOrderStatus(value) {
+    const status = String(value || "pending")
+        .trim()
+        .toLowerCase();
+
+    if (!ORDER_STATUSES.has(status)) {
+        throw new Error("ORDER_STATUS_INVALID");
+    }
+
+    return status;
+}
 function normalizeImageKey(value) {
     const imageKey =
         String(value || "").trim();
@@ -581,7 +610,373 @@ app.delete(
         }
     }
 );
+/*
+|--------------------------------------------------------------------------
+| ORDERS - LẤY DANH SÁCH ĐƠN HÀNG
+|--------------------------------------------------------------------------
+*/
 
+app.get(
+    "/api/orders",
+    async (req, res) => {
+        try {
+            validateOrdersConfig();
+
+            const result = await dynamo.send(
+                new ScanCommand({
+                    TableName: ORDERS_TABLE
+                })
+            );
+
+            const orders = (result.Items || [])
+                .sort((a, b) => {
+                    return String(
+                        b.createdAt || ""
+                    ).localeCompare(
+                        String(a.createdAt || "")
+                    );
+                });
+
+            return res
+                .status(200)
+                .json(orders);
+        } catch (error) {
+            console.error(
+                "GET /api/orders failed:",
+                error
+            );
+
+            return res
+                .status(500)
+                .json({
+                    error:
+                        "Không thể tải danh sách đơn hàng"
+                });
+        }
+    }
+);
+
+/*
+|--------------------------------------------------------------------------
+| ORDERS - TẠO ĐƠN HÀNG
+|--------------------------------------------------------------------------
+*/
+
+app.post(
+    "/api/orders",
+    async (req, res) => {
+        try {
+            validateOrdersConfig();
+
+            const id = String(
+                req.body?.id || crypto.randomUUID()
+            ).trim();
+
+            const machineName = String(
+                req.body?.machineName ||
+                req.body?.username ||
+                ""
+            )
+                .trim()
+                .toLowerCase();
+
+            const itemsSummary = String(
+                req.body?.itemsSummary || ""
+            ).trim();
+
+            const totalAmount = Number(
+                req.body?.totalAmount
+            );
+
+            const paymentMethod = String(
+                req.body?.paymentMethod || "Unknown"
+            ).trim();
+
+            let status = "pending";
+
+            try {
+                status = normalizeOrderStatus(
+                    req.body?.status || "pending"
+                );
+            } catch {
+                return res
+                    .status(400)
+                    .json({
+                        error:
+                            "Trạng thái đơn hàng không hợp lệ"
+                    });
+            }
+
+            if (!id) {
+                return res
+                    .status(400)
+                    .json({
+                        error:
+                            "Thiếu mã đơn hàng"
+                    });
+            }
+
+            if (!machineName) {
+                return res
+                    .status(400)
+                    .json({
+                        error:
+                            "Thiếu tên máy đặt hàng"
+                    });
+            }
+
+            if (!itemsSummary) {
+                return res
+                    .status(400)
+                    .json({
+                        error:
+                            "Thiếu nội dung đơn hàng"
+                    });
+            }
+
+            if (
+                !Number.isFinite(totalAmount) ||
+                totalAmount < 0
+            ) {
+                return res
+                    .status(400)
+                    .json({
+                        error:
+                            "Tổng tiền đơn hàng không hợp lệ"
+                    });
+            }
+
+            const now =
+                new Date().toISOString();
+
+            const order = {
+                id,
+                machineName,
+                itemsSummary,
+                totalAmount,
+                paymentMethod,
+                status,
+                time:
+                    req.body?.time ||
+                    new Date().toLocaleTimeString(
+                        "vi-VN",
+                        {
+                            timeZone:
+                                "Asia/Ho_Chi_Minh"
+                        }
+                    ),
+                createdAt: now,
+                updatedAt: now
+            };
+
+            await dynamo.send(
+                new PutCommand({
+                    TableName: ORDERS_TABLE,
+                    Item: order,
+                    ConditionExpression:
+                        "attribute_not_exists(id)"
+                })
+            );
+
+            return res
+                .status(201)
+                .json({
+                    success: true,
+                    order
+                });
+        } catch (error) {
+            console.error(
+                "POST /api/orders failed:",
+                error
+            );
+
+            return res
+                .status(500)
+                .json({
+                    error:
+                        "Không thể tạo đơn hàng"
+                });
+        }
+    }
+);
+
+/*
+|--------------------------------------------------------------------------
+| ORDERS - CẬP NHẬT TRẠNG THÁI ĐƠN HÀNG
+|--------------------------------------------------------------------------
+*/
+
+async function updateOrderStatusHandler(
+    req,
+    res
+) {
+    try {
+        validateOrdersConfig();
+
+        const id = String(
+            req.params.id || ""
+        ).trim();
+
+        let status = "";
+
+        try {
+            status = normalizeOrderStatus(
+                req.body?.status
+            );
+        } catch {
+            return res
+                .status(400)
+                .json({
+                    error:
+                        "Trạng thái đơn hàng không hợp lệ"
+                });
+        }
+
+        if (!id) {
+            return res
+                .status(400)
+                .json({
+                    error:
+                        "Thiếu mã đơn hàng"
+                });
+        }
+
+        const result = await dynamo.send(
+            new UpdateCommand({
+                TableName: ORDERS_TABLE,
+                Key: {
+                    id
+                },
+                UpdateExpression:
+                    "SET #status = :status, updatedAt = :updatedAt",
+                ConditionExpression:
+                    "attribute_exists(id)",
+                ExpressionAttributeNames: {
+                    "#status": "status"
+                },
+                ExpressionAttributeValues: {
+                    ":status": status,
+                    ":updatedAt":
+                        new Date().toISOString()
+                },
+                ReturnValues: "ALL_NEW"
+            })
+        );
+
+        return res
+            .status(200)
+            .json({
+                success: true,
+                order: result.Attributes
+            });
+    } catch (error) {
+        console.error(
+            "UPDATE /api/orders/:id/status failed:",
+            error
+        );
+
+        if (
+            error.name ===
+            "ConditionalCheckFailedException"
+        ) {
+            return res
+                .status(404)
+                .json({
+                    error:
+                        "Không tìm thấy đơn hàng"
+                });
+        }
+
+        return res
+            .status(500)
+            .json({
+                error:
+                    "Không thể cập nhật đơn hàng"
+            });
+    }
+}
+
+app.patch(
+    "/api/orders/:id/status",
+    updateOrderStatusHandler
+);
+
+app.put(
+    "/api/orders/:id/status",
+    updateOrderStatusHandler
+);
+
+app.put(
+    "/api/orders/:id",
+    updateOrderStatusHandler
+);
+
+/*
+|--------------------------------------------------------------------------
+| ORDERS - XÓA ĐƠN HÀNG
+|--------------------------------------------------------------------------
+*/
+
+app.delete(
+    "/api/orders/:id",
+    async (req, res) => {
+        try {
+            validateOrdersConfig();
+
+            const id = String(
+                req.params.id || ""
+            ).trim();
+
+            if (!id) {
+                return res
+                    .status(400)
+                    .json({
+                        error:
+                            "Thiếu mã đơn hàng"
+                    });
+            }
+
+            const result = await dynamo.send(
+                new DeleteCommand({
+                    TableName: ORDERS_TABLE,
+                    Key: {
+                        id
+                    },
+                    ReturnValues: "ALL_OLD"
+                })
+            );
+
+            if (!result.Attributes) {
+                return res
+                    .status(404)
+                    .json({
+                        error:
+                            "Không tìm thấy đơn hàng"
+                    });
+            }
+
+            return res
+                .status(200)
+                .json({
+                    success: true,
+                    deletedOrder:
+                        result.Attributes
+                });
+        } catch (error) {
+            console.error(
+                "DELETE /api/orders/:id failed:",
+                error
+            );
+
+            return res
+                .status(500)
+                .json({
+                    error:
+                        "Không thể xóa đơn hàng"
+                });
+        }
+    }
+);
 /*
 |--------------------------------------------------------------------------
 | API KHÔNG TỒN TẠI

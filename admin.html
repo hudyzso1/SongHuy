@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
     <title>Hệ Thống Quản Lý CyberNet - Admin</title>
 
     <script src="https://cdn.tailwindcss.com"></script>
@@ -171,9 +170,20 @@
 
         <!-- QUẢN LÝ ĐƠN HÀNG -->
         <div class="cyber-card p-5 rounded-2xl shadow-lg mt-6 border-l-4 border-l-orange-500">
-            <h3 class="text-cyan-400 font-bold uppercase mb-4 flex items-center gap-2">
-                🛒 ĐƠN HÀNG CHỜ XÁC NHẬN
-            </h3>
+            <div class="flex justify-between items-center mb-4 gap-4">
+                <h3 class="text-cyan-400 font-bold uppercase flex items-center gap-2">
+                    🛒 ĐƠN HÀNG CHỜ XÁC NHẬN
+                </h3>
+
+                <button
+                    type="button"
+                    onclick="loadOrders()"
+                    class="bg-gray-800 hover:bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg text-xs font-bold transition"
+                >
+                    <i class="fas fa-rotate-right mr-1"></i>
+                    TẢI LẠI
+                </button>
+            </div>
 
             <div id="adminOrderList" class="flex flex-col gap-3"></div>
         </div>
@@ -186,33 +196,34 @@
 
             <div class="flex gap-3 mb-6 flex-wrap">
                 <div class="w-full flex items-center gap-4 bg-gray-950 border border-gray-800 p-3 rounded-xl">
-    <input
-        type="file"
-        id="newProductImage"
-        accept="image/jpeg,image/png,image/webp"
-        class="flex-1 text-sm text-gray-300
-               file:mr-3 file:px-4 file:py-2
-               file:rounded-lg file:border-0
-               file:bg-cyan-700 file:text-white
-               file:font-bold file:cursor-pointer
-               hover:file:bg-cyan-600"
-    >
+                    <input
+                        type="file"
+                        id="newProductImage"
+                        accept="image/jpeg,image/png,image/webp"
+                        class="flex-1 text-sm text-gray-300
+                            file:mr-3 file:px-4 file:py-2
+                            file:rounded-lg file:border-0
+                            file:bg-cyan-700 file:text-white
+                            file:font-bold file:cursor-pointer
+                            hover:file:bg-cyan-600"
+                    >
 
-    <div class="w-24 h-20 rounded-lg overflow-hidden border border-gray-700 bg-gray-900 flex items-center justify-center">
-        <img
-            id="newProductImagePreview"
-            class="hidden w-full h-full object-cover"
-            alt="Xem trước ảnh món"
-        >
+                    <div class="w-24 h-20 rounded-lg overflow-hidden border border-gray-700 bg-gray-900 flex items-center justify-center">
+                        <img
+                            id="newProductImagePreview"
+                            class="hidden w-full h-full object-cover"
+                            alt="Xem trước ảnh món"
+                        >
 
-        <span
-            id="newProductImagePlaceholder"
-            class="text-[10px] text-gray-500 text-center px-2"
-        >
-            CHƯA CHỌN ẢNH
-        </span>
-    </div>
-</div>
+                        <span
+                            id="newProductImagePlaceholder"
+                            class="text-[10px] text-gray-500 text-center px-2"
+                        >
+                            CHƯA CHỌN ẢNH
+                        </span>
+                    </div>
+                </div>
+
                 <input
                     type="text"
                     id="newProductName"
@@ -337,7 +348,9 @@
                 gravity: "top",
                 position: "right",
                 style: {
-                    background: backgrounds[type] || backgrounds.success,
+                    background:
+                        backgrounds[type] ||
+                        backgrounds.success,
                     color: "#fff",
                     fontWeight: "bold",
                     borderRadius: "10px"
@@ -382,26 +395,36 @@
                     `${SERVER_URL}/api/revenue`
                 );
 
-                const revenue = Number(data?.revenue) || 0;
+                const revenue =
+                    Number(data?.revenue) || 0;
 
                 document.getElementById(
                     "revenue-display"
-                ).innerText = `${revenue.toLocaleString("vi-VN")}đ`;
+                ).innerText =
+                    `${revenue.toLocaleString("vi-VN")}đ`;
             } catch (error) {
-                console.error("Lỗi tải doanh thu:", error);
+                console.error(
+                    "Lỗi tải doanh thu:",
+                    error
+                );
             }
         }
 
         async function syncWithServer() {
             const container =
-                document.getElementById("device-container");
+                document.getElementById(
+                    "device-container"
+                );
 
             try {
                 const devices = await fetchJson(
                     `${SERVER_URL}/api/sync-devices`
                 );
 
-                if (!Array.isArray(devices) || devices.length === 0) {
+                if (
+                    !Array.isArray(devices) ||
+                    devices.length === 0
+                ) {
                     container.innerHTML = `
                         <p class="col-span-2 text-xs text-gray-500 text-center py-4">
                             Chưa có máy trạm nào!
@@ -410,76 +433,87 @@
                     return;
                 }
 
-                container.innerHTML = devices.map(device => {
-                    const username = escapeHtml(device.username);
-                    const usernameForJs = encodeURIComponent(
-                        String(device.username || "")
-                    );
+                container.innerHTML =
+                    devices.map(device => {
+                        const username =
+                            escapeHtml(device.username);
 
-                    const status = escapeHtml(device.status);
-                    const timeRemaining = escapeHtml(
-                        device.time_remaining
-                    );
+                        const usernameForJs =
+                            encodeURIComponent(
+                                String(device.username || "")
+                            );
 
-                    const money =
-                        Number(device.money) || 0;
+                        const status =
+                            escapeHtml(device.status);
 
-                    const isPlaying =
-                        device.status === "playing";
+                        const timeRemaining =
+                            escapeHtml(
+                                device.time_remaining
+                            );
 
-                    const isSelected =
-                        selectedMachine ===
-                        String(device.username || "")
-                            .toLowerCase();
+                        const money =
+                            Number(device.money) || 0;
 
-                    return `
-                        <div
-                            data-machine="${usernameForJs}"
-                            onclick="selectMachine(
-                                decodeURIComponent(this.dataset.machine)
-                            )"
-                            class="machine-btn border p-3 rounded-xl flex flex-col justify-between
-                                ${
-                                    isPlaying
-                                        ? "border-green-950 bg-green-950/40 text-green-400"
-                                        : "border-red-900/50 bg-red-950/30 text-red-400"
-                                }
-                                ${
-                                    isSelected
-                                        ? "border-cyan-400 ring-2 ring-cyan-500/30 font-black"
-                                        : ""
-                                }"
-                        >
-                            <div class="flex justify-between items-center mb-1">
-                                <span class="text-xs font-bold">
-                                    ${username.toUpperCase()}
-                                </span>
+                        const isPlaying =
+                            device.status === "playing";
 
-                                <span class="text-[9px] uppercase px-1.5 py-0.5 rounded-md bg-black/40 font-mono">
-                                    ${status}
-                                </span>
-                            </div>
+                        const isSelected =
+                            selectedMachine ===
+                            String(
+                                device.username || ""
+                            ).toLowerCase();
 
-                            <div class="space-y-0.5 mt-1 text-left">
-                                <p class="text-[10px] opacity-80">
-                                    ⏰ Còn:
-                                    <span class="font-mono font-bold">
-                                        ${timeRemaining}
+                        return `
+                            <div
+                                data-machine="${usernameForJs}"
+                                onclick="selectMachine(
+                                    decodeURIComponent(this.dataset.machine)
+                                )"
+                                class="machine-btn border p-3 rounded-xl flex flex-col justify-between
+                                    ${
+                                        isPlaying
+                                            ? "border-green-950 bg-green-950/40 text-green-400"
+                                            : "border-red-900/50 bg-red-950/30 text-red-400"
+                                    }
+                                    ${
+                                        isSelected
+                                            ? "border-cyan-400 ring-2 ring-cyan-500/30 font-black"
+                                            : ""
+                                    }"
+                            >
+                                <div class="flex justify-between items-center mb-1">
+                                    <span class="text-xs font-bold">
+                                        ${username.toUpperCase()}
                                     </span>
-                                </p>
 
-                                <p class="text-[10px] opacity-80">
-                                    💰 Quỹ:
-                                    <span>
-                                        ${money.toLocaleString("vi-VN")}đ
+                                    <span class="text-[9px] uppercase px-1.5 py-0.5 rounded-md bg-black/40 font-mono">
+                                        ${status}
                                     </span>
-                                </p>
+                                </div>
+
+                                <div class="space-y-0.5 mt-1 text-left">
+                                    <p class="text-[10px] opacity-80">
+                                        ⏰ Còn:
+                                        <span class="font-mono font-bold">
+                                            ${timeRemaining}
+                                        </span>
+                                    </p>
+
+                                    <p class="text-[10px] opacity-80">
+                                        💰 Quỹ:
+                                        <span>
+                                            ${money.toLocaleString("vi-VN")}đ
+                                        </span>
+                                    </p>
+                                </div>
                             </div>
-                        </div>
-                    `;
-                }).join("");
+                        `;
+                    }).join("");
             } catch (error) {
-                console.error("Lỗi đồng bộ máy trạm:", error);
+                console.error(
+                    "Lỗi đồng bộ máy trạm:",
+                    error
+                );
 
                 container.innerHTML = `
                     <p class="col-span-2 text-xs text-red-400 text-center py-4">
@@ -490,9 +524,10 @@
         }
 
         window.selectMachine = function (machineName) {
-            selectedMachine = String(machineName || "")
-                .toLowerCase()
-                .trim();
+            selectedMachine =
+                String(machineName || "")
+                    .toLowerCase()
+                    .trim();
 
             document.getElementById(
                 "current-monitoring-title"
@@ -512,7 +547,9 @@
         };
 
         async function updateLiveScreenshot() {
-            if (!selectedMachine) return;
+            if (!selectedMachine) {
+                return;
+            }
 
             const image =
                 document.getElementById("screen-may01");
@@ -539,7 +576,10 @@
                         "CHƯA NHẬN ĐƯỢC TÍN HIỆU TỪ MÁY KHÁCH NÀY!";
                 }
             } catch (error) {
-                console.error("Lỗi tải ảnh màn hình:", error);
+                console.error(
+                    "Lỗi tải ảnh màn hình:",
+                    error
+                );
 
                 image.classList.add("hidden");
                 text.classList.remove("hidden");
@@ -553,10 +593,14 @@
                 document.getElementById("btn-topup");
 
             const usernameInput =
-                document.getElementById("topup-username");
+                document.getElementById(
+                    "topup-username"
+                );
 
             const amountInput =
-                document.getElementById("topup-amount");
+                document.getElementById(
+                    "topup-amount"
+                );
 
             const username =
                 usernameInput.value.trim();
@@ -613,7 +657,8 @@
                 amountInput.value = "";
 
                 showToast(
-                    data?.msg || "Nạp tiền thành công!",
+                    data?.msg ||
+                    "Nạp tiền thành công!",
                     "success"
                 );
 
@@ -629,108 +674,138 @@
                 button.innerText = "XÁC NHẬN NẠP";
             }
         };
+
         const productImageInput =
-    document.getElementById("newProductImage");
+            document.getElementById("newProductImage");
 
-const productImagePreview =
-    document.getElementById("newProductImagePreview");
+        const productImagePreview =
+            document.getElementById(
+                "newProductImagePreview"
+            );
 
-const productImagePlaceholder =
-    document.getElementById("newProductImagePlaceholder");
+        const productImagePlaceholder =
+            document.getElementById(
+                "newProductImagePlaceholder"
+            );
 
-let productPreviewObjectUrl = null;
+        let productPreviewObjectUrl = null;
 
-productImageInput.addEventListener("change", () => {
-    const file = productImageInput.files?.[0];
+        productImageInput.addEventListener(
+            "change",
+            () => {
+                const file =
+                    productImageInput.files?.[0];
 
-    if (productPreviewObjectUrl) {
-        URL.revokeObjectURL(productPreviewObjectUrl);
-        productPreviewObjectUrl = null;
-    }
+                if (productPreviewObjectUrl) {
+                    URL.revokeObjectURL(
+                        productPreviewObjectUrl
+                    );
 
-    if (!file) {
-        productImagePreview.removeAttribute("src");
-        productImagePreview.classList.add("hidden");
-        productImagePlaceholder.classList.remove("hidden");
-        return;
-    }
+                    productPreviewObjectUrl = null;
+                }
 
-    const allowedTypes = [
-        "image/jpeg",
-        "image/png",
-        "image/webp"
-    ];
+                if (!file) {
+                    productImagePreview.removeAttribute(
+                        "src"
+                    );
 
-    if (!allowedTypes.includes(file.type)) {
-        productImageInput.value = "";
+                    productImagePreview.classList.add(
+                        "hidden"
+                    );
 
-        showToast(
-            "Chỉ hỗ trợ ảnh JPG, PNG hoặc WEBP!",
-            "error"
+                    productImagePlaceholder.classList.remove(
+                        "hidden"
+                    );
+
+                    return;
+                }
+
+                const allowedTypes = [
+                    "image/jpeg",
+                    "image/png",
+                    "image/webp"
+                ];
+
+                if (!allowedTypes.includes(file.type)) {
+                    productImageInput.value = "";
+
+                    showToast(
+                        "Chỉ hỗ trợ ảnh JPG, PNG hoặc WEBP!",
+                        "error"
+                    );
+
+                    return;
+                }
+
+                if (file.size > 5 * 1024 * 1024) {
+                    productImageInput.value = "";
+
+                    showToast(
+                        "Ảnh không được vượt quá 5 MB!",
+                        "error"
+                    );
+
+                    return;
+                }
+
+                productPreviewObjectUrl =
+                    URL.createObjectURL(file);
+
+                productImagePreview.src =
+                    productPreviewObjectUrl;
+
+                productImagePreview.classList.remove(
+                    "hidden"
+                );
+
+                productImagePlaceholder.classList.add(
+                    "hidden"
+                );
+            }
         );
 
-        return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-        productImageInput.value = "";
-
-        showToast(
-            "Ảnh không được vượt quá 5 MB!",
-            "error"
-        );
-
-        return;
-    }
-
-    productPreviewObjectUrl =
-        URL.createObjectURL(file);
-
-    productImagePreview.src =
-        productPreviewObjectUrl;
-
-    productImagePreview.classList.remove("hidden");
-    productImagePlaceholder.classList.add("hidden");
-});
         async function uploadProductImage(file) {
-    const uploadInfo = await fetchJson(
-        `${CLOUD_API_URL}/api/products/upload-url`,
-        {
-            method: "POST",
-            headers: {
-                "Content-Type":
-                    "application/json; charset=utf-8"
-            },
-            body: JSON.stringify({
-                fileName: file.name,
-                contentType: file.type,
-                fileSize: file.size
-            })
+            const uploadInfo = await fetchJson(
+                `${CLOUD_API_URL}/api/products/upload-url`,
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type":
+                            "application/json; charset=utf-8"
+                    },
+                    body: JSON.stringify({
+                        fileName: file.name,
+                        contentType: file.type,
+                        fileSize: file.size
+                    })
+                }
+            );
+
+            const uploadResponse = await fetch(
+                uploadInfo.uploadUrl,
+                {
+                    method: "PUT",
+                    headers: {
+                        "Content-Type": file.type
+                    },
+                    body: file
+                }
+            );
+
+            if (!uploadResponse.ok) {
+                throw new Error(
+                    `Upload ảnh thất bại: HTTP ${uploadResponse.status}`
+                );
+            }
+
+            return uploadInfo.imageKey;
         }
-    );
 
-    const uploadResponse = await fetch(
-        uploadInfo.uploadUrl,
-        {
-            method: "PUT",
-            headers: {
-                "Content-Type": file.type
-            },
-            body: file
-        }
-    );
-
-    if (!uploadResponse.ok) {
-        throw new Error(
-            `Upload ảnh thất bại: HTTP ${uploadResponse.status}`
-        );
-    }
-
-    return uploadInfo.imageKey;
-}
         async function loadProducts() {
             const list =
-                document.getElementById("adminProductList");
+                document.getElementById(
+                    "adminProductList"
+                );
 
             list.innerHTML = `
                 <p class="text-gray-500 italic text-sm">
@@ -755,70 +830,74 @@ productImageInput.addEventListener("change", () => {
                     return;
                 }
 
-                list.innerHTML = products.map(product => {
-                    const id =
-                        escapeHtml(product.id);
+                list.innerHTML =
+                    products.map(product => {
+                        const id =
+                            escapeHtml(product.id);
 
-                    const name =
-                        escapeHtml(product.name);
+                        const name =
+                            escapeHtml(product.name);
 
-                    const price =
-                        Number(product.price) || 0;
+                        const price =
+                            Number(product.price) || 0;
 
-                    const stock =
-                        Number(product.stock) || 0;
+                        const stock =
+                            Number(product.stock) || 0;
 
-                    return `
-    <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden shadow-md">
-        <div class="w-full h-36 bg-gray-950 flex items-center justify-center overflow-hidden">
-            ${
-                product.imageUrl
-                    ? `
-                        <img
-                            src="${escapeHtml(product.imageUrl)}"
-                            alt="${name}"
-                            class="w-full h-full object-cover"
-                            loading="lazy"
-                        >
-                    `
-                    : `
-                        <div class="text-gray-600 text-xs text-center">
-                            <i class="fas fa-image text-3xl mb-2 block"></i>
-                            CHƯA CÓ ẢNH
-                        </div>
-                    `
-            }
-        </div>
+                        return `
+                            <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden shadow-md">
+                                <div class="w-full h-36 bg-gray-950 flex items-center justify-center overflow-hidden">
+                                    ${
+                                        product.imageUrl
+                                            ? `
+                                                <img
+                                                    src="${escapeHtml(product.imageUrl)}"
+                                                    alt="${name}"
+                                                    class="w-full h-full object-cover"
+                                                    loading="lazy"
+                                                >
+                                            `
+                                            : `
+                                                <div class="text-gray-600 text-xs text-center">
+                                                    <i class="fas fa-image text-3xl mb-2 block"></i>
+                                                    CHƯA CÓ ẢNH
+                                                </div>
+                                            `
+                                    }
+                                </div>
 
-        <div class="p-4 flex justify-between items-center">
-            <div>
-                <p class="text-white font-bold text-sm mb-1">
-                    ${name}
-                </p>
+                                <div class="p-4 flex justify-between items-center">
+                                    <div>
+                                        <p class="text-white font-bold text-sm mb-1">
+                                            ${name}
+                                        </p>
 
-                <p class="text-cyan-400 font-bold text-sm">
-                    ${price.toLocaleString("vi-VN")}đ
+                                        <p class="text-cyan-400 font-bold text-sm">
+                                            ${price.toLocaleString("vi-VN")}đ
 
-                    <span class="text-gray-500 text-xs ml-1">
-                        (Tồn: ${stock})
-                    </span>
-                </p>
-            </div>
+                                            <span class="text-gray-500 text-xs ml-1">
+                                                (Tồn: ${stock})
+                                            </span>
+                                        </p>
+                                    </div>
 
-            <button
-                type="button"
-                data-product-id="${id}"
-                onclick="deleteProduct(this.dataset.productId)"
-                class="bg-red-900/60 hover:bg-red-600 text-red-200 px-3 py-1.5 rounded-lg text-xs font-bold transition"
-            >
-                XÓA
-            </button>
-        </div>
-    </div>
-`;
-                }).join("");
+                                    <button
+                                        type="button"
+                                        data-product-id="${id}"
+                                        onclick="deleteProduct(this.dataset.productId)"
+                                        class="bg-red-900/60 hover:bg-red-600 text-red-200 px-3 py-1.5 rounded-lg text-xs font-bold transition"
+                                    >
+                                        XÓA
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                    }).join("");
             } catch (error) {
-                console.error("Lỗi tải sản phẩm:", error);
+                console.error(
+                    "Lỗi tải sản phẩm:",
+                    error
+                );
 
                 list.innerHTML = `
                     <p class="text-red-400 text-sm">
@@ -831,125 +910,141 @@ productImageInput.addEventListener("change", () => {
         }
 
         window.addNewProduct = async function () {
-    const nameInput =
-        document.getElementById("newProductName");
+            const nameInput =
+                document.getElementById(
+                    "newProductName"
+                );
 
-    const priceInput =
-        document.getElementById("newProductPrice");
+            const priceInput =
+                document.getElementById(
+                    "newProductPrice"
+                );
 
-    const stockInput =
-        document.getElementById("newProductStock");
+            const stockInput =
+                document.getElementById(
+                    "newProductStock"
+                );
 
-    const imageInput =
-        document.getElementById("newProductImage");
+            const imageInput =
+                document.getElementById(
+                    "newProductImage"
+                );
 
-    const name =
-        nameInput.value.trim();
+            const name =
+                nameInput.value.trim();
 
-    const price =
-        Number(priceInput.value);
+            const price =
+                Number(priceInput.value);
 
-    const stock =
-        Number(stockInput.value);
+            const stock =
+                Number(stockInput.value);
 
-    const imageFile =
-        imageInput.files?.[0] || null;
+            const imageFile =
+                imageInput.files?.[0] || null;
 
-    if (!name) {
-        showToast(
-            "Vui lòng nhập tên món!",
-            "error"
-        );
+            if (!name) {
+                showToast(
+                    "Vui lòng nhập tên món!",
+                    "error"
+                );
 
-        nameInput.focus();
-        return;
-    }
-
-    if (!Number.isFinite(price) || price < 0) {
-        showToast(
-            "Giá sản phẩm không hợp lệ!",
-            "error"
-        );
-
-        priceInput.focus();
-        return;
-    }
-
-    if (!Number.isInteger(stock) || stock < 0) {
-        showToast(
-            "Tồn kho phải là số nguyên không âm!",
-            "error"
-        );
-
-        stockInput.focus();
-        return;
-    }
-
-    try {
-        let imageKey = "";
-
-        if (imageFile) {
-            showToast(
-                "Đang upload ảnh lên S3...",
-                "warning"
-            );
-
-            imageKey =
-                await uploadProductImage(imageFile);
-        }
-
-        await fetchJson(
-            `${CLOUD_API_URL}/api/products`,
-            {
-                method: "POST",
-                headers: {
-                    "Content-Type":
-                        "application/json; charset=utf-8"
-                },
-                body: JSON.stringify({
-                    name,
-                    price,
-                    stock,
-                    imageKey
-                })
+                nameInput.focus();
+                return;
             }
-        );
 
-        nameInput.value = "";
-        priceInput.value = "";
-        stockInput.value = "";
-        imageInput.value = "";
+            if (
+                !Number.isFinite(price) ||
+                price < 0
+            ) {
+                showToast(
+                    "Giá sản phẩm không hợp lệ!",
+                    "error"
+                );
 
-        if (productPreviewObjectUrl) {
-            URL.revokeObjectURL(
-                productPreviewObjectUrl
-            );
+                priceInput.focus();
+                return;
+            }
 
-            productPreviewObjectUrl = null;
-        }
+            if (
+                !Number.isInteger(stock) ||
+                stock < 0
+            ) {
+                showToast(
+                    "Tồn kho phải là số nguyên không âm!",
+                    "error"
+                );
 
-        productImagePreview.removeAttribute("src");
-        productImagePreview.classList.add("hidden");
-        productImagePlaceholder.classList.remove("hidden");
+                stockInput.focus();
+                return;
+            }
 
-        await loadProducts();
+            try {
+                let imageKey = "";
 
-        showToast(
-            "Thêm món và ảnh thành công!",
-            "success"
-        );
-    } catch (error) {
-        console.error(
-            "Lỗi thêm sản phẩm:",
-            error
-        );
+                if (imageFile) {
+                    showToast(
+                        "Đang upload ảnh lên S3...",
+                        "warning"
+                    );
 
-        showToast(
-            error.message,
-            "error"
-        );
-    }
-};
+                    imageKey =
+                        await uploadProductImage(
+                            imageFile
+                        );
+                }
+
+                await fetchJson(
+                    `${CLOUD_API_URL}/api/products`,
+                    {
+                        method: "POST",
+                        headers: {
+                            "Content-Type":
+                                "application/json; charset=utf-8"
+                        },
+                        body: JSON.stringify({
+                            name,
+                            price,
+                            stock,
+                            imageKey
+                        })
+                    }
+                );
+
+                nameInput.value = "";
+                priceInput.value = "";
+                stockInput.value = "";
+                imageInput.value = "";
+
+                if (productPreviewObjectUrl) {
+                    URL.revokeObjectURL(
+                        productPreviewObjectUrl
+                    );
+
+                    productPreviewObjectUrl = null;
+                }
+
+                productImagePreview.removeAttribute("src");
+                productImagePreview.classList.add("hidden");
+                productImagePlaceholder.classList.remove("hidden");
+
+                await loadProducts();
+
+                showToast(
+                    "Thêm món và ảnh thành công!",
+                    "success"
+                );
+            } catch (error) {
+                console.error(
+                    "Lỗi thêm sản phẩm:",
+                    error
+                );
+
+                showToast(
+                    error.message,
+                    "error"
+                );
+            }
+        };
 
         window.deleteProduct = async function (id) {
             if (!id) {
@@ -960,11 +1055,14 @@ productImageInput.addEventListener("change", () => {
                 return;
             }
 
-            const confirmed = window.confirm(
-                "M có chắc muốn xóa sản phẩm này không?"
-            );
+            const confirmed =
+                window.confirm(
+                    "M có chắc muốn xóa sản phẩm này không?"
+                );
 
-            if (!confirmed) return;
+            if (!confirmed) {
+                return;
+            }
 
             try {
                 await fetchJson(
@@ -997,19 +1095,23 @@ productImageInput.addEventListener("change", () => {
 
         async function loadOrders() {
             const list =
-                document.getElementById("adminOrderList");
+                document.getElementById(
+                    "adminOrderList"
+                );
 
             try {
                 const data = await fetchJson(
-                    `${SERVER_URL}/api/orders`
+                    `${CLOUD_API_URL}/api/orders`
                 );
 
                 const orders =
                     Array.isArray(data) ? data : [];
 
-                const pendingOrders = orders.filter(
-                    order => order.status === "pending"
-                );
+                const pendingOrders =
+                    orders.filter(
+                        order =>
+                            order.status === "pending"
+                    );
 
                 if (pendingOrders.length === 0) {
                     list.innerHTML = `
@@ -1020,120 +1122,258 @@ productImageInput.addEventListener("change", () => {
                     return;
                 }
 
-                list.innerHTML = pendingOrders.map(order => {
-                    const id =
-                        escapeHtml(order.id);
+                list.innerHTML =
+                    pendingOrders.map(order => {
+                        const id =
+                            escapeHtml(order.id);
 
-                    const machineName =
-                        escapeHtml(order.machineName);
+                        const machineName =
+                            escapeHtml(
+                                order.machineName
+                            );
 
-                    const machineForJs =
-                        encodeURIComponent(
-                            String(order.machineName || "")
-                        );
+                        const machineForJs =
+                            encodeURIComponent(
+                                String(
+                                    order.machineName ||
+                                    ""
+                                )
+                            );
 
-                    const time =
-                        escapeHtml(order.time);
+                        const time =
+                            escapeHtml(order.time);
 
-                    const itemsSummary =
-                        escapeHtml(order.itemsSummary);
+                        const itemsSummary =
+                            escapeHtml(
+                                order.itemsSummary
+                            );
 
-                    const totalAmount =
-                        Number(order.totalAmount) || 0;
+                        const totalAmount =
+                            Number(
+                                order.totalAmount
+                            ) || 0;
 
-                    return `
-                        <div class="bg-gray-900 border border-gray-800 border-l-4 border-l-orange-500 p-4 rounded-xl flex justify-between items-center shadow-md">
-                            <div>
-                                <p class="text-cyan-400 font-bold text-sm mb-1 uppercase">
-                                    MÁY: ${machineName}
+                        const paymentMethod =
+                            escapeHtml(
+                                order.paymentMethod ||
+                                "Không rõ"
+                            );
 
-                                    <span class="text-gray-500 text-xs font-normal normal-case ml-2">
-                                        - ${time}
-                                    </span>
-                                </p>
+                        return `
+                            <div class="bg-gray-900 border border-gray-800 border-l-4 border-l-orange-500 p-4 rounded-xl flex flex-col md:flex-row md:justify-between md:items-center gap-4 shadow-md">
+                                <div>
+                                    <p class="text-cyan-400 font-bold text-sm mb-1 uppercase">
+                                        MÁY: ${machineName}
 
-                                <p class="text-white text-sm mb-1">
-                                    ${itemsSummary}
-                                </p>
+                                        <span class="text-gray-500 text-xs font-normal normal-case ml-2">
+                                            - ${time}
+                                        </span>
+                                    </p>
 
-                                <p class="text-orange-400 font-bold text-sm">
-                                    Tổng tiền:
-                                    ${totalAmount.toLocaleString("vi-VN")}đ
-                                </p>
+                                    <p class="text-white text-sm mb-1">
+                                        ${itemsSummary}
+                                    </p>
+
+                                    <p class="text-orange-400 font-bold text-sm">
+                                        Tổng tiền:
+                                        ${totalAmount.toLocaleString("vi-VN")}đ
+                                    </p>
+
+                                    <p class="text-gray-500 text-xs mt-1">
+                                        Thanh toán:
+                                        ${paymentMethod}
+                                    </p>
+                                </div>
+
+                                <div class="flex flex-wrap gap-2 justify-end">
+                                    <button
+                                        type="button"
+                                        data-order-id="${id}"
+                                        data-machine="${machineForJs}"
+                                        onclick="updateOrderStatus(
+                                            this.dataset.orderId,
+                                            'completed',
+                                            decodeURIComponent(this.dataset.machine)
+                                        )"
+                                        class="bg-green-700 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-xs font-bold transition"
+                                    >
+                                        ✓ HOÀN THÀNH
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        data-order-id="${id}"
+                                        data-machine="${machineForJs}"
+                                        onclick="updateOrderStatus(
+                                            this.dataset.orderId,
+                                            'cancelled',
+                                            decodeURIComponent(this.dataset.machine)
+                                        )"
+                                        class="bg-yellow-700 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg text-xs font-bold transition"
+                                    >
+                                        HỦY
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        data-order-id="${id}"
+                                        onclick="deleteOrder(this.dataset.orderId)"
+                                        class="bg-red-700 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-xs font-bold transition"
+                                    >
+                                        XÓA
+                                    </button>
+                                </div>
                             </div>
-
-                            <button
-                                type="button"
-                                data-order-id="${id}"
-                                data-machine="${machineForJs}"
-                                onclick="verifyOrder(
-                                    this.dataset.orderId,
-                                    decodeURIComponent(
-                                        this.dataset.machine
-                                    )
-                                )"
-                                class="bg-cyan-600 hover:bg-cyan-500 text-white px-5 py-2 rounded-lg text-sm font-bold transition"
-                            >
-                                ✓ XÁC NHẬN
-                            </button>
-                        </div>
-                    `;
-                }).join("");
-            } catch (error) {
-                console.error("Lỗi tải đơn hàng:", error);
-
-                list.innerHTML = `
-                    <p class="text-red-400 text-sm py-2">
-                        Không tải được đơn hàng từ server local.
-                    </p>
-                `;
-            }
-        }
-
-        window.verifyOrder = async function (
-            orderId,
-            machineName
-        ) {
-            try {
-                await fetchJson(
-                    `${SERVER_URL}/api/orders/${
-                        encodeURIComponent(orderId)
-                    }`,
-                    {
-                        method: "PUT"
-                    }
-                );
-
-                await Promise.all([
-                    fetchRevenue(),
-                    loadOrders()
-                ]);
-
-                showToast(
-                    `Đã xác nhận đơn hàng cho ${
-                        String(machineName || "").toUpperCase()
-                    }!`,
-                    "success"
-                );
+                        `;
+                    }).join("");
             } catch (error) {
                 console.error(
-                    "Lỗi xác nhận đơn hàng:",
+                    "Lỗi tải đơn hàng:",
                     error
                 );
 
-                showToast(
-                    error.message,
-                    "error"
-                );
+                list.innerHTML = `
+                    <p class="text-red-400 text-sm py-2">
+                        Không tải được đơn hàng từ AWS.
+                    </p>
+                `;
+
+                showToast(error.message, "error");
             }
-        };
+        }
+
+        window.updateOrderStatus =
+            async function (
+                orderId,
+                status,
+                machineName = ""
+            ) {
+                if (!orderId) {
+                    showToast(
+                        "Không tìm thấy mã đơn hàng!",
+                        "error"
+                    );
+                    return;
+                }
+
+                try {
+                    await fetchJson(
+                        `${CLOUD_API_URL}/api/orders/${
+                            encodeURIComponent(orderId)
+                        }/status`,
+                        {
+                            method: "PATCH",
+                            headers: {
+                                "Content-Type":
+                                    "application/json; charset=utf-8"
+                            },
+                            body: JSON.stringify({
+                                status
+                            })
+                        }
+                    );
+
+                    await loadOrders();
+
+                    const label =
+                        status === "completed"
+                            ? "hoàn thành"
+                            : status === "cancelled"
+                                ? "hủy"
+                                : "cập nhật";
+
+                    showToast(
+                        `Đã ${label} đơn hàng ${
+                            machineName
+                                ? "cho " +
+                                  String(machineName).toUpperCase()
+                                : ""
+                        }!`,
+                        "success"
+                    );
+                } catch (error) {
+                    console.error(
+                        "Lỗi cập nhật đơn hàng:",
+                        error
+                    );
+
+                    showToast(
+                        error.message,
+                        "error"
+                    );
+                }
+            };
+
+        window.verifyOrder =
+            async function (
+                orderId,
+                machineName
+            ) {
+                await window.updateOrderStatus(
+                    orderId,
+                    "completed",
+                    machineName
+                );
+            };
+
+        window.deleteOrder =
+            async function (orderId) {
+                if (!orderId) {
+                    showToast(
+                        "Không tìm thấy mã đơn hàng!",
+                        "error"
+                    );
+                    return;
+                }
+
+                const confirmed =
+                    window.confirm(
+                        "M có chắc muốn xóa đơn hàng này không?"
+                    );
+
+                if (!confirmed) {
+                    return;
+                }
+
+                try {
+                    await fetchJson(
+                        `${CLOUD_API_URL}/api/orders/${
+                            encodeURIComponent(orderId)
+                        }`,
+                        {
+                            method: "DELETE"
+                        }
+                    );
+
+                    await loadOrders();
+
+                    showToast(
+                        "Đã xóa đơn hàng!",
+                        "success"
+                    );
+                } catch (error) {
+                    console.error(
+                        "Lỗi xóa đơn hàng:",
+                        error
+                    );
+
+                    showToast(
+                        error.message,
+                        "error"
+                    );
+                }
+            };
 
         window.toggleAdminChat = function () {
             const chatBox =
-                document.getElementById("admin-chat-box");
+                document.getElementById(
+                    "admin-chat-box"
+                );
 
             const badge =
-                document.getElementById("admin-chat-badge");
+                document.getElementById(
+                    "admin-chat-badge"
+                );
 
             chatBox.classList.toggle("hidden");
             badge.classList.add("hidden");
@@ -1160,12 +1400,16 @@ productImageInput.addEventListener("change", () => {
 
         window.adminReply = async function () {
             const input =
-                document.getElementById("admin-chat-input");
+                document.getElementById(
+                    "admin-chat-input"
+                );
 
             const message =
                 input.value.trim();
 
-            if (!message) return;
+            if (!message) {
+                return;
+            }
 
             const targetMachine =
                 selectedMachine || "may02";
@@ -1180,13 +1424,16 @@ productImageInput.addEventListener("change", () => {
                                 "application/json; charset=utf-8"
                         },
                         body: JSON.stringify({
-                            machine: targetMachine
-                                .toLowerCase()
-                                .trim(),
+                            machine:
+                                targetMachine
+                                    .toLowerCase()
+                                    .trim(),
                             from: "admin",
                             msg: message,
                             time: new Date()
-                                .toLocaleTimeString("vi-VN"),
+                                .toLocaleTimeString(
+                                    "vi-VN"
+                                ),
                             read: false
                         })
                     }
@@ -1196,8 +1443,15 @@ productImageInput.addEventListener("change", () => {
 
                 await renderAdminChat();
             } catch (error) {
-                console.error("Lỗi gửi chat:", error);
-                showToast(error.message, "error");
+                console.error(
+                    "Lỗi gửi chat:",
+                    error
+                );
+
+                showToast(
+                    error.message,
+                    "error"
+                );
             }
         };
 
@@ -1212,7 +1466,9 @@ productImageInput.addEventListener("change", () => {
                     "admin-chat-badge"
                 );
 
-            if (!box) return;
+            if (!box) {
+                return;
+            }
 
             try {
                 const data = await fetchJson(
@@ -1222,54 +1478,56 @@ productImageInput.addEventListener("change", () => {
                 const chats =
                     Array.isArray(data) ? data : [];
 
-                box.innerHTML = chats.map(chat => {
-                    const fromAdmin =
-                        chat.from === "admin";
+                box.innerHTML =
+                    chats.map(chat => {
+                        const fromAdmin =
+                            chat.from === "admin";
 
-                    const machine =
-                        escapeHtml(
-                            chat.machine || "KHÁCH"
-                        ).toUpperCase();
+                        const machine =
+                            escapeHtml(
+                                chat.machine || "KHÁCH"
+                            ).toUpperCase();
 
-                    const message =
-                        escapeHtml(chat.msg);
+                        const message =
+                            escapeHtml(chat.msg);
 
-                    const time =
-                        escapeHtml(chat.time);
+                        const time =
+                            escapeHtml(chat.time);
 
-                    return `
-                        <div class="${
-                            fromAdmin
-                                ? "text-right"
-                                : "text-left"
-                        }">
-                            <p class="inline-block ${
+                        return `
+                            <div class="${
                                 fromAdmin
-                                    ? "bg-cyan-900 text-cyan-200"
-                                    : "bg-gray-800 text-gray-200"
-                            } p-2 rounded text-xs">
-                                <strong class="text-orange-400">
-                                    [${machine}]:
-                                </strong>
+                                    ? "text-right"
+                                    : "text-left"
+                            }">
+                                <p class="inline-block ${
+                                    fromAdmin
+                                        ? "bg-cyan-900 text-cyan-200"
+                                        : "bg-gray-800 text-gray-200"
+                                } p-2 rounded text-xs">
+                                    <strong class="text-orange-400">
+                                        [${machine}]:
+                                    </strong>
 
-                                ${message}
-                            </p>
+                                    ${message}
+                                </p>
 
-                            <p class="text-[9px] text-gray-500">
-                                ${time}
-                            </p>
-                        </div>
-                    `;
-                }).join("");
+                                <p class="text-[9px] text-gray-500">
+                                    ${time}
+                                </p>
+                            </div>
+                        `;
+                    }).join("");
 
                 box.scrollTop =
                     box.scrollHeight;
 
-                const hasUnread = chats.some(
-                    chat =>
-                        chat.from !== "admin" &&
-                        !chat.read
-                );
+                const hasUnread =
+                    chats.some(
+                        chat =>
+                            chat.from !== "admin" &&
+                            !chat.read
+                    );
 
                 const chatBox =
                     document.getElementById(
@@ -1278,14 +1536,19 @@ productImageInput.addEventListener("change", () => {
 
                 if (
                     hasUnread &&
-                    chatBox.classList.contains("hidden")
+                    chatBox.classList.contains(
+                        "hidden"
+                    )
                 ) {
                     badge.classList.remove("hidden");
                 } else {
                     badge.classList.add("hidden");
                 }
             } catch (error) {
-                console.error("Lỗi tải chat:", error);
+                console.error(
+                    "Lỗi tải chat:",
+                    error
+                );
             }
         }
 

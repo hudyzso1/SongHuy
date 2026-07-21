@@ -183,10 +183,10 @@
 
             <div
                 id="client-order-status"
-                class="cyber-panel p-4 rounded-xl text-xs text-gray-400 space-y-đ
-                    </button>
-                </2 max-h-[180px] overflow-y-auto"
-            ></div>
+                class="cyber-panel p-4 rounded-xl text-xs text-gray-400 space-y-2 max-h-[180px] overflow-y-auto"
+            >
+                Chưa đặt món nào.
+            </div>
         </section>
     </div>
 
@@ -371,6 +371,19 @@
             }
 
             return data;
+        }
+
+        function createOrderId() {
+            if (
+                window.crypto &&
+                typeof window.crypto.randomUUID === "function"
+            ) {
+                return window.crypto.randomUUID();
+            }
+
+            return `${Date.now()}-${Math.random()
+                .toString(16)
+                .slice(2)}`;
         }
 
         window.logout = function () {
@@ -824,29 +837,27 @@
             itemsSummary
         ) {
             try {
+                const orderBody = {
+                    id: createOrderId(),
+                    machineName: normalizedUser,
+                    itemsSummary,
+                    totalAmount,
+                    paymentMethod,
+                    status: "pending",
+                    time:
+                        new Date()
+                            .toLocaleTimeString("vi-VN")
+                };
+
                 await fetchJson(
-                    `${SERVER_URL}/api/orders`,
+                    `${CLOUD_API_URL}/api/orders`,
                     {
                         method: "POST",
                         headers: {
                             "Content-Type":
                                 "application/json; charset=utf-8"
                         },
-                        body: JSON.stringify({
-                            id: Date.now(),
-                            machineName:
-                                normalizedUser,
-                            itemsSummary,
-                            totalAmount,
-                            paymentMethod,
-                            status:
-                                "pending",
-                            time:
-                                new Date()
-                                    .toLocaleTimeString(
-                                        "vi-VN"
-                                    )
-                        })
+                        body: JSON.stringify(orderBody)
                     }
                 );
 
@@ -855,12 +866,17 @@
                 renderCart();
 
                 showToast(
-                    "Đã gửi đơn hàng lên server!",
+                    "Đã gửi đơn hàng lên AWS!",
                     "success"
                 );
 
                 await loadMyOrders();
             } catch (error) {
+                console.error(
+                    "Lỗi gửi đơn hàng lên AWS:",
+                    error
+                );
+
                 showToast(
                     error.message,
                     "error"
@@ -877,7 +893,7 @@
             try {
                 const orders =
                     await fetchJson(
-                        `${SERVER_URL}/api/orders`
+                        `${CLOUD_API_URL}/api/orders`
                     );
 
                 const myOrders =
@@ -886,16 +902,23 @@
                             ? orders
                             : []
                     )
-                        .filter(
-                            order =>
-                                order.machineName ===
-                                normalizedUser
-                        )
-                        .reverse();
+                        .filter(order => {
+                            const orderMachine =
+                                String(order.machineName || "")
+                                    .toLowerCase()
+                                    .trim();
 
-                if (
-                    myOrders.length === 0
-                ) {
+                            return orderMachine === normalizedUser;
+                        })
+                        .sort((a, b) => {
+                            return String(
+                                b.createdAt || ""
+                            ).localeCompare(
+                                String(a.createdAt || "")
+                            );
+                        });
+
+                if (myOrders.length === 0) {
                     box.innerHTML =
                         "Chưa đặt món nào.";
 
@@ -903,8 +926,30 @@
                 }
 
                 box.innerHTML =
-                    myOrders.map(
-                        order => `
+                    myOrders.map(order => {
+                        const totalAmount =
+                            Number(order.totalAmount) || 0;
+
+                        const status =
+                            String(order.status || "pending")
+                                .toLowerCase()
+                                .trim();
+
+                        const statusText =
+                            status === "pending"
+                                ? "ĐANG CHUẨN BỊ"
+                                : status === "cancelled"
+                                    ? "ĐÃ HỦY"
+                                    : "ĐÃ GIAO";
+
+                        const statusClass =
+                            status === "pending"
+                                ? "text-orange-400"
+                                : status === "cancelled"
+                                    ? "text-red-400"
+                                    : "text-green-400";
+
+                        return `
                             <div class="flex justify-between border-b border-gray-800 pb-2 mb-2 gap-2">
                                 <div>
                                     <p class="text-white text-[11px] font-bold mb-1">
@@ -913,39 +958,32 @@
 
                                     <p class="text-[10px] text-gray-500">
                                         Tổng:
-                                        ${
-                                            (
-                                                Number(
-                                                    order.totalAmount
-                                                ) || 0
-                                            ).toLocaleString(
-                                                "vi-VN"
-                                            )
-                                        }đ
+                                        ${totalAmount.toLocaleString("vi-VN")}đ
+                                    </p>
+
+                                    <p class="text-[10px] text-gray-500">
+                                        Máy:
+                                        ${escapeHtml(order.machineName)}
                                     </p>
                                 </div>
 
-                                <span class="${
-                                    order.status ===
-                                    "pending"
-                                        ? "text-orange-400"
-                                        : "text-green-400"
-                                } font-bold text-[10px] mt-1 whitespace-nowrap">
-                                    ${
-                                        order.status ===
-                                        "pending"
-                                            ? "ĐANG CHUẨN BỊ"
-                                            : "ĐÃ GIAO"
-                                    }
+                                <span class="${statusClass} font-bold text-[10px] mt-1 whitespace-nowrap">
+                                    ${statusText}
                                 </span>
                             </div>
-                        `
-                    ).join("");
+                        `;
+                    }).join("");
             } catch (error) {
                 console.error(
-                    "Lỗi tải đơn hàng:",
+                    "Lỗi tải đơn hàng AWS:",
                     error
                 );
+
+                box.innerHTML = `
+                    <span class="text-red-400">
+                        Không tải được đơn hàng từ AWS.
+                    </span>
+                `;
             }
         }
 
@@ -1066,11 +1104,14 @@
                         Array.isArray(chats)
                             ? chats
                             : []
-                    ).filter(
-                        chat =>
-                            chat.machine ===
-                            normalizedUser
-                    );
+                    ).filter(chat => {
+                        const machine =
+                            String(chat.machine || "")
+                                .toLowerCase()
+                                .trim();
+
+                        return machine === normalizedUser;
+                    });
 
                 box.innerHTML =
                     myChats.map(
@@ -1164,11 +1205,14 @@
                         )
                             ? serverUsers
                             : []
-                    ).find(
-                        item =>
-                            item.username ===
-                            normalizedUser
-                    );
+                    ).find(item => {
+                        const username =
+                            String(item.username || "")
+                                .toLowerCase()
+                                .trim();
+
+                        return username === normalizedUser;
+                    });
 
                 if (!myData) {
                     return;
@@ -1386,4 +1430,4 @@
         );
     </script>
 </body>
-</html>
+</html> 
